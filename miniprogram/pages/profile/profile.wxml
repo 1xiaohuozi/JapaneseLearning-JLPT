@@ -1,0 +1,25 @@
+<view class="profile-container">  
+  <view class="profile-card">
+    <image class="avatar" src="/images/avatar.png" mode="aspectFill" />
+    <view class="welcome">欢迎回来！</view>
+    <view class="user-id">用户 ID：{{userId}}</view>
+  </view>
+
+  <view class="action-list" style="width: 366rpx; display: flex; box-sizing: content-box">
+    <button class="action-btn feedback-btn" style="height: 150rpx; display: block; box-sizing: border-box; width: 366rpx" open-type="feedback">
+      💬 意见反馈
+    </button>
+
+    <!-- 动态显示 登录 / 退出按钮 -->
+    <block wx:if="{{userId === '未登录'}}">
+      <button class="action-btn login-btn" bindtap="handleLogin" style="width: 366rpx; display: block; box-sizing: border-box;">
+        🔐 登录
+      </button>
+    </block>
+    <block wx:else>
+      <button class="action-btn logout-btn" bindtap="handleLogout" style="width: 366rpx; display: block; box-sizing: border-box;">
+        🚪 退出登录
+      </button>
+    </block>
+  </view>
+</view>

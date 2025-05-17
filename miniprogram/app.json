@@ -1,0 +1,40 @@
+{
+  "pages": [
+    "pages/grammar/grammar",
+    "pages/deepstudy/deepstudy",
+    "pages/profile/profile" ,
+    "pages/login/login"
+  ],
+  "window": {
+    "backgroundColor": "#F6F6F6",
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#1E90FF",
+    "navigationBarTitleText": "日语N2语法",
+    "navigationBarTextStyle": "white"
+  },
+  "tabBar": {
+    "color": "#999",
+    "selectedColor": "#1E90FF",
+    "list": [
+      {
+        "pagePath": "pages/grammar/grammar",
+        "text": "通览",
+        "iconPath": "images/我的工作台.png",
+        "selectedIconPath": "images/我的工作台 2.png"
+      },
+      {
+        "pagePath": "pages/deepstudy/deepstudy",
+        "text": "深度学习",
+        "iconPath": "images/深度学习1.png",
+        "selectedIconPath": "images/深度学习2.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",  
+        "text": "我的",
+        "iconPath": "images/我的.png",
+        "selectedIconPath": "images/我的 2.png"
+      }
+    ]
+  },
+  "sitemapLocation": "sitemap.json"
+}

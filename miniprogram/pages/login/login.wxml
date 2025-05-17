@@ -1,0 +1,21 @@
+<view class="login-container">
+  <view class="login-header">
+    <image src="/images/avatar.png" mode="aspectFit"></image>
+    <text>日语N2语法学习</text>
+  </view>
+  
+  <view class="login-form">
+    <button 
+      type="primary" 
+      bindtap="onLoginTap"
+      class="login-btn"
+    >
+      微信一键登录
+    </button>
+    
+    
+    <view class="login-tip">
+      登录后可以保存学习进度和熟练度
+    </view>
+  </view>
+</view>

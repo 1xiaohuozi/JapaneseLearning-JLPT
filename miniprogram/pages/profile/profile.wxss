@@ -1,0 +1,83 @@
+.profile-container {
+  padding: 80rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: linear-gradient(135deg, #e0f2fe, #f8fafc);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.profile-card {
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  padding: 40rpx 30rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 640rpx;
+  margin-bottom: 100rpx;
+  animation: fadeIn 0.6s ease-out;
+}
+
+.avatar {
+  width: 180rpx;
+  height: 180rpx;
+  border-radius: 50%;
+  margin-bottom: 24rpx;
+  box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.1);
+}
+
+.welcome {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 10rpx;
+}
+
+.user-id {
+  font-size: 26rpx;
+  color: #64748b;
+}
+
+.action-list {
+  width: 100%;
+  max-width: 640rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 32rpx;
+}
+
+.action-btn {
+  padding: 28rpx 0;
+  font-size: 40rpx;
+  font-weight: 600;
+  border-radius: 20rpx;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.feedback-btn {
+  background: linear-gradient(to right, #3b82f6, #60a5fa);
+  color: white;
+  box-shadow: 0 6rpx 12rpx rgba(59, 130, 246, 0.3);
+}
+
+.logout-btn {
+  background: linear-gradient(to right, #ef4444, #f87171);
+  color: white;
+  box-shadow: 0 6rpx 12rpx rgba(239, 68, 68, 0.3);
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20rpx);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

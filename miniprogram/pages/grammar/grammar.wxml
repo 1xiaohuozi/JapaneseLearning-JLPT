@@ -1,0 +1,71 @@
+<view class="container fade-in">
+  <!-- 模式选择 -->
+  <view class="mode-selector shadow">
+    <button bindtap="switchMode" data-mode="order" class="mode-btn {{mode === 'order' ? 'active' : ''}}" style="width: 181rpx; display: block; box-sizing: border-box; left: -5rpx; top: -3rpx; position: relative">顺序学习</button>
+    <button bindtap="switchMode" data-mode="random" class="mode-btn {{mode === 'random' ? 'active' : ''}}" style="width: 181rpx; display: block; box-sizing: border-box; left: 5rpx; top: -5rpx; position: relative">随机学习</button>
+  </view>
+
+  <!-- 搜索框 -->
+  <view class="search-bar slide-in">
+    <input style="width: 675rpx; display: block; box-sizing: border-box; height: 83rpx" placeholder="🔍 搜索语法点" bindinput="onSearchInput" value="{{searchKeyword}}" />
+    <button wx:if="{{searchKeyword}}" bindtap="clearSearch" class="clear-btn">✕</button>
+  </view>
+
+  <!-- 语法列表 -->
+  <view class="grammar-list fade-in-delay">
+    <block wx:for="{{grammarList}}" wx:key="grammar_id">
+      <view class="grammar-item hover-effect" bindtap="showDetail" data-id="{{item.grammar_id}}">
+        <view class="grammar-header">
+          <text class="grammar-id">#{{item.grammar_id}}</text>
+          <text class="grammar-title">{{item.title}}</text>
+          <view class="proficiency" wx:if="{{userRecords[item.grammar_id]}}">
+            熟练度: {{userRecords[item.grammar_id].proficiency}}/5
+          </view>
+        </view>
+        <view class="grammar-meaning">{{item.meaning}}</view>
+      </view>
+    </block>
+  </view>
+
+  <!-- 加载更多 -->
+  <view class="load-more">
+    <button bindtap="loadMore" loading="{{loading}}" class="load-btn">加载更多</button>
+  </view>
+
+  <!-- 语法详情弹窗 -->
+  <view class="modal" wx:if="{{showModal}}">
+    <view class="modal-content slide-up">
+      <view class="modal-header">
+        <text class="modal-title">📘 {{currentGrammar.grammar_id}} {{currentGrammar.title}}</text>
+        <button class="close-btn" bindtap="hideDetail">×</button>
+      </view>
+      <view class="modal-body">
+        <view class="grammar-section">
+          <text class="section-title">接续:</text>
+          <text class="section-content">{{currentGrammar.connection}}</text>
+        </view>
+        <view class="grammar-section">
+          <text class="section-title">意思:</text>
+          <text class="section-content">{{currentGrammar.meaning}}</text>
+        </view>
+        <view class="grammar-section">
+          <text class="section-title">例文:</text>
+          <text class="section-content">{{currentGrammar.example}}</text>
+        </view>
+        <view class="grammar-section" wx:if="{{currentGrammar.note}}">
+          <text class="section-title">注意:</text>
+          <text class="section-content">{{currentGrammar.note}}</text>
+        </view>
+        <view class="proficiency-control">
+          <text>当前熟练度:</text>
+          <view class="stars">
+            <block wx:for="{{[1,2,3,4,5]}}" wx:key="*this">
+              <text class="star {{currentProficiency >= item ? 'active' : ''}}" 
+                    bindtap="setProficiency" data-value="{{item}}">★</text>
+            </block>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

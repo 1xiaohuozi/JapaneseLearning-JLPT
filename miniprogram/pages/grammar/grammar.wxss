@@ -1,0 +1,272 @@
+/* 容器和背景渐变 */
+.container {
+  padding: 20px;
+  background: linear-gradient(to bottom, #f0f4ff, #ffffff);
+  min-height: 100vh;
+  animation: fadeIn 0.6s ease-in;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: #333;
+}
+
+/* 动画定义 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* 模式选择器 */
+.mode-selector {
+  display: flex;
+  margin-bottom: 15px;
+  gap: 10px;
+  justify-content: space-between;
+}
+.mode-selector button {
+  flex: 1;
+  padding: 10px 0;
+  font-size: 15px;
+  border-radius: 20px;
+  background-color: #e0e6f6;
+  border: none;
+  color: #1e3a8a;
+  font-weight: 600;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+.mode-selector button.active {
+  background: linear-gradient(90deg, #1e90ff, #00bfff);
+  color: white;
+  box-shadow: 0 4px 8px rgba(30, 144, 255, 0.3);
+}
+.mode-selector button:active {
+  transform: scale(0.95);
+}
+
+/* 搜索框 */
+.search-bar {
+  position: relative;
+  margin-bottom: 15px;
+}
+.search-bar input {
+  width: 100%;
+  padding: 12px 40px 12px 15px;
+  font-size: 15px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  transition: box-shadow 0.3s ease;
+  background-color: #fff;
+}
+.search-bar input:focus {
+  box-shadow: 0 0 5px rgba(30, 144, 255, 0.5);
+  outline: none;
+}
+.clear-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #999;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.clear-btn:hover {
+  color: #666;
+}
+
+/* 语法卡片 */
+.grammar-list {
+  margin-bottom: 20px;
+}
+.grammar-item {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 12px;
+  box-shadow: 0 3px 6px rgba(0,0,0,0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.grammar-item:hover {
+  box-shadow: 0 6px 12px rgba(30,144,255,0.3);
+  cursor: pointer;
+}
+.grammar-item:active {
+  transform: scale(0.98);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.grammar-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.grammar-id {
+  font-weight: 600;
+  color: #1e3a8a;
+}
+.grammar-title {
+  font-weight: 700;
+  font-size: 17px;
+  color: #0b2161;
+  flex: 1;
+  margin-left: 10px;
+}
+.proficiency {
+  font-size: 13px;
+  color: #666;
+}
+.grammar-meaning {
+  color: #555;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* 星星熟练度 */
+.stars {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.star {
+  font-size: 26px;
+  color: #ccc;
+  transition: color 0.3s, transform 0.2s;
+  user-select: none;
+}
+.star.active {
+  color: #ffcc00;
+  transform: scale(1.1);
+}
+.star:hover {
+  color: #ffdd55;
+  transform: scale(1.2);
+  cursor: pointer;
+}
+
+/* 加载更多按钮 */
+.load-more {
+  text-align: center;
+  margin-bottom: 30px;
+}
+.load-btn {
+  background: linear-gradient(90deg, #1e90ff, #00bfff);
+  color: white;
+  padding: 12px 30px;
+  font-size: 16px;
+  border: none;
+  border-radius: 25px;
+  box-shadow: 0 4px 8px rgba(30,144,255,0.4);
+  transition: background 0.3s ease;
+}
+.load-btn:active {
+  background: linear-gradient(90deg, #007acc, #0099ee);
+}
+
+/* 弹窗遮罩 */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0,0,0,0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: fadeIn 0.3s ease-in;
+  z-index: 999;
+}
+
+/* 弹窗内容 */
+.modal-content {
+  background: white;
+  border-radius: 18px;
+  width: 90%;
+  max-width: 500px;
+  padding: 25px 20px;
+  animation: scaleIn 0.3s ease-out;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+}
+
+/* 弹窗头部 */
+.modal-header {
+  position: relative;
+  padding-right: 40px; /* 给关闭按钮留空间 */
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.modal-title {
+  font-weight: 700;
+  font-size: 20px;
+  color: #0b2161;
+  flex: 1; /* 占满剩余空间 */
+}
+
+.close-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 26px;
+  color: #999;
+  cursor: pointer;
+  transition: transform 0.3s ease, color 0.3s ease;
+}
+.close-btn:hover {
+  color: #555;
+  transform: translateY(-50%) rotate(90deg);
+}
+
+/* 弹窗内容段落 */
+.grammar-section {
+  margin-bottom: 15px;
+}
+.section-title {
+  font-weight: 600;
+  color: #1e3a8a;
+  margin-bottom: 4px;
+}
+.section-content {
+  font-size: 15px;
+  color: #444;
+  line-height: 1.5;
+}
+
+/* 熟练度控制 */
+.proficiency-control {
+  text-align: center;
+  margin-top: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
+/* 阴影和动画类 */
+.shadow {
+  box-shadow: 0 4px 10px rgba(30, 144, 255, 0.15);
+}
+.fade-in {
+  animation: fadeIn 0.6s ease forwards;
+}
+.fade-in-delay {
+  animation: fadeIn 1s ease forwards;
+}
+.slide-in {
+  animation: fadeIn 0.5s ease forwards;
+}
+.slide-up {
+  animation: scaleIn 0.3s ease forwards;
+}
+
+/* hover效果提示 */
+.hover-effect:hover {
+  cursor: pointer;
+}

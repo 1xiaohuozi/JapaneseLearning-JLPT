@@ -1,0 +1,46 @@
+<view class="container">
+  <view wx:if="{{currentGrammar}}" class="card fade-in">
+    <text class="grammar-title">{{currentGrammar.grammar_id}}：{{currentGrammar.title}}</text>
+
+    <view class="button-group" wx:if="{{!showDetail}}">
+      <button class="btn known-btn" bindtap="handleAnswer" data-known="true">认识</button>
+      <button class="btn unknown-btn" bindtap="handleAnswer" data-known="false">不认识</button>
+    </view>
+
+    <view wx:if="{{showDetail}}" class="grammar-detail slide-in">
+      <view wx:if="{{showDetail}}" class="grammar-detail slide-in">
+  <view class="detail-box">
+    <text class="detail-label">接续：</text>
+    <text class="detail-text">{{currentGrammar.connection}}</text>
+  </view>
+  <view class="detail-box">
+    <text class="detail-label">意思：</text>
+    <text class="detail-text">{{currentGrammar.meaning}}</text>
+  </view>
+  <view class="detail-box">
+    <text class="detail-label">例句：</text>
+    <text class="detail-text">{{currentGrammar.example}}</text>
+  </view>
+  <view class="detail-box">
+    <text class="detail-label">备注：</text>
+    <text class="detail-text">{{currentGrammar.note}}</text>
+  </view>
+
+  <button class="next-btn" bindtap="nextGrammar">下一条</button>
+</view>
+
+
+
+    </view>
+  </view>
+
+  <view wx:elif="{{allCompleted}}" class="completed fade-in">
+    <text class="completed-text">🎉 恭喜你，所有语法均已熟练！</text>
+    <text class="completed-subtext">你可以点击下面按钮，重新开始复习。</text>
+    <button class="restart-btn" bindtap="resetStudy">重新开始复习</button>
+  </view>
+
+  <view wx:else class="loading fade-in">
+    <text>⏳ 正在加载中...</text>
+  </view>
+</view>
