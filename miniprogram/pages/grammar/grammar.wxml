@@ -1,4 +1,4 @@
-<view class="container fade-in">
+<view class="container fade-in"> 
   <!-- 模式选择 -->
   <view class="mode-selector shadow">
     <button bindtap="switchMode" data-mode="order" class="mode-btn {{mode === 'order' ? 'active' : ''}}" style="width: 181rpx; display: block; box-sizing: border-box; left: -5rpx; top: -3rpx; position: relative">顺序学习</button>
@@ -7,10 +7,13 @@
 
   <!-- 搜索框 -->
   <view class="search-bar slide-in">
-    <input style="width: 675rpx; display: block; box-sizing: border-box; height: 83rpx" placeholder="🔍 搜索语法点" bindinput="onSearchInput" value="{{searchKeyword}}" />
-    <button wx:if="{{searchKeyword}}" bindtap="clearSearch" class="clear-btn">✕</button>
+    <input style="width: 675rpx; display: block; box-sizing: border-box; height: 83rpx" placeholder="🔍 搜索语法点" bindinput="onSearchInput" value="{{searchText}}" />
+    <button wx:if="{{searchText}}" bindtap="clearSearch" class="clear-btn">✕</button>
   </view>
-
+  <view style="margin: 20rpx 0;" class="fade-in">
+  <switch checked="{{showMeaning}}" bindchange="toggleMeaning" />
+  <text style="margin-left: 20rpx;">{{showMeaning ? '显示语法意思' : '隐藏语法意思（暗记模式）'}}</text>
+</view>
   <!-- 语法列表 -->
   <view class="grammar-list fade-in-delay">
     <block wx:for="{{grammarList}}" wx:key="grammar_id">
@@ -18,17 +21,18 @@
         <view class="grammar-header">
           <text class="grammar-id">#{{item.grammar_id}}</text>
           <text class="grammar-title">{{item.title}}</text>
-          <view class="proficiency" wx:if="{{userRecords[item.grammar_id]}}">
+          <!-- 只有登录且有对应记录才显示熟练度 -->
+          <view class="proficiency" wx:if="{{isLoggedIn && userRecords[item.grammar_id]}}">
             熟练度: {{userRecords[item.grammar_id].proficiency}}/5
           </view>
         </view>
-        <view class="grammar-meaning">{{item.meaning}}</view>
+        <view class="grammar-meaning" wx:if="{{showMeaning}}">{{item.meaning}}</view>
       </view>
     </block>
   </view>
 
   <!-- 加载更多 -->
-  <view class="load-more">
+  <view class="load-more" wx:if="{{hasMore}}">
     <button bindtap="loadMore" loading="{{loading}}" class="load-btn">加载更多</button>
   </view>
 
@@ -37,6 +41,11 @@
     <view class="modal-content slide-up">
       <view class="modal-header">
         <text class="modal-title">📘 {{currentGrammar.grammar_id}} {{currentGrammar.title}}</text>
+        <view class="favorite-wrapper" bindtap="toggleFavorite">
+    <image class="favorite-icon scale-in" 
+           src="{{isFavorite ? '../../images/star2.png' : '../../images/star1.png'}}" 
+           mode="aspectFit" />
+  </view>
         <button class="close-btn" bindtap="hideDetail">×</button>
       </view>
       <view class="modal-body">
@@ -56,7 +65,7 @@
           <text class="section-title">注意:</text>
           <text class="section-content">{{currentGrammar.note}}</text>
         </view>
-        <view class="proficiency-control">
+        <view class="proficiency-control" wx:if="{{isLoggedIn}}">
           <text>当前熟练度:</text>
           <view class="stars">
             <block wx:for="{{[1,2,3,4,5]}}" wx:key="*this">
@@ -64,6 +73,10 @@
                     bindtap="setProficiency" data-value="{{item}}">★</text>
             </block>
           </view>
+          <button bindtap="updateProficiency" class="save-btn">保存熟练度</button>
+        </view>
+        <view wx:if="{{!isLoggedIn}}">
+          <text style="color: #999;">请登录后设置熟练度</text>
         </view>
       </view>
     </view>

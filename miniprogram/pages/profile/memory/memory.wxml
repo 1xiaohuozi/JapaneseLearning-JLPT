@@ -1,0 +1,17 @@
+<view class="memory-page">
+
+<view wx:for="{{memoryGroups}}" wx:key="index" class="memory-block animated-fade-in">
+  <view class="memory-header" bindtap="toggleExpand" data-index="{{index}}">
+    <view class="memory-title">{{item.icon}} {{item.title}}</view>
+    <text class="toggle-icon">{{item.expanded ? '▲' : '▼'}}</text>
+  </view>
+
+  <view wx:if="{{item.expanded}}" class="memory-content">
+    <view wx:for="{{item.contentList}}" wx:key="subIndex" wx:for-item="grammar" wx:for-index="subIndex" class="grammar-item">
+  {{subIndex + 1}}. {{grammar}}
+</view>
+
+  </view>
+</view>
+
+</view>

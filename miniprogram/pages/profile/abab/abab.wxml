@@ -1,0 +1,21 @@
+<view class="container">
+  <block wx:for="{{vocabData}}" wx:key="category">
+    <view class="section">
+      <view class="title">{{item.icon}} {{item.category}}</view>
+      <view class="table">
+        <view class="table-header">
+          <text class="cell word">单词</text>
+          <text class="cell meaning">含义</text>
+          <text class="cell example">例句</text>
+        </view>
+        <block wx:for="{{item.words}}" wx:key="word">
+          <view class="table-row">
+            <text class="cell word">{{item.word}}</text>
+            <text class="cell meaning">{{item.meaning}}</text>
+            <text class="cell example">{{item.example}}</text>
+          </view>
+        </block>
+      </view>
+    </view>
+  </block>
+</view>

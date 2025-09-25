@@ -1,0 +1,54 @@
+.container {
+  padding: 20rpx;
+  background-color: #f9f9f9;
+}
+
+.section {
+  margin-bottom: 40rpx;
+}
+
+.title {
+  font-size: 32rpx;
+  font-weight: bold;
+  margin-bottom: 10rpx;
+}
+
+.table {
+  background-color: #ffffff;
+  border-radius: 12rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.05);
+}
+
+.table-header,
+.table-row {
+  display: flex;
+  flex-direction: row;
+  padding: 20rpx;
+  border-bottom: 1rpx solid #e5e5e5;
+}
+
+.table-header {
+  background-color: #f0f0f0;
+  font-weight: bold;
+}
+
+.cell {
+  padding: 0 10rpx;
+}
+
+.word {
+  flex: 1;
+  color: #3c3c3c;
+}
+
+.meaning {
+  flex: 1;
+  color: #1d72b8;
+}
+
+.example {
+  flex: 3;
+  color: #666;
+  font-size: 26rpx;
+}

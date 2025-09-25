@@ -1,35 +1,50 @@
 {
   "pages": [
+    "pages/word-learning/word-learning",
     "pages/grammar/grammar",
-    "pages/deepstudy/deepstudy",
-    "pages/profile/profile" ,
-    "pages/login/login"
+    "pages/grammar/deepstudy/deepstudy",
+    "pages/grammar/favorites/favorites",
+    "pages/speaking/speaking",
+    "pages/profile/profile",
+    "pages/profile/login/login",
+    "pages/profile/abab/abab",
+    "pages/profile/memory/memory",
+    "pages/profile/jlptcodes/jlptcodes",
+    "pages/profile/leaderboard/leaderboard"
+   
   ],
   "window": {
     "backgroundColor": "#F6F6F6",
     "backgroundTextStyle": "light",
     "navigationBarBackgroundColor": "#1E90FF",
-    "navigationBarTitleText": "日语N2语法",
-    "navigationBarTextStyle": "white"
+    "navigationBarTitleText": "日语N2备考通",
+    "navigationBarTextStyle": "white",
+    "enableShareAppMessage": true
   },
   "tabBar": {
     "color": "#999",
     "selectedColor": "#1E90FF",
     "list": [
       {
-        "pagePath": "pages/grammar/grammar",
-        "text": "通览",
-        "iconPath": "images/我的工作台.png",
-        "selectedIconPath": "images/我的工作台 2.png"
+        "pagePath": "pages/word-learning/word-learning",
+        "text": "单词背诵",
+        "iconPath": "images/背单词1.png",
+        "selectedIconPath": "images/背单词2.png"
       },
       {
-        "pagePath": "pages/deepstudy/deepstudy",
-        "text": "深度学习",
+        "pagePath": "pages/grammar/deepstudy/deepstudy",
+        "text": "语法学习",
         "iconPath": "images/深度学习1.png",
         "selectedIconPath": "images/深度学习2.png"
       },
       {
-        "pagePath": "pages/profile/profile",  
+        "pagePath": "pages/speaking/speaking",
+        "text": "听力口语",
+        "iconPath": "images/听力1.png",
+        "selectedIconPath": "images/听力2.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",
         "text": "我的",
         "iconPath": "images/我的.png",
         "selectedIconPath": "images/我的 2.png"

@@ -1,0 +1,38 @@
+<view class="container">    
+  <view class="page-title">🏆 学习排行榜</view>
+
+  <block wx:for="{{leaderboardTop10}}" wx:key="_id" wx:for-index="index">
+    <view class="leaderboard-item card {{item.userId === currentUser ? 'highlight' : ''}}">
+      
+      <!-- 排名 -->
+      <view class="rank-container">
+        <text class="rank">{{index + 1}}</text>
+      </view>
+
+      <!-- 用户头像 -->
+      <image class="avatar" src="{{item.avatar || '/images/蓝宝书.png'}}" mode="aspectFill" />
+
+      <!-- 用户信息 -->
+      <view class="user-info">
+        <text class="username">{{item.userIdMasked}}</text>
+        <view class="scores">
+          <text class="score">单词: {{item.wordTotal}}</text>
+  <text class="score"> || 语法: {{item.studyTotal}}</text>
+  <text class="score"> || 听力: {{item.speakingTotal}}</text>
+  <text class="score total">---总数: {{item.totalCount}}</text>
+</view>
+
+      </view>
+
+    </view>
+  </block>
+
+  <view wx:if="{{leaderboardTop10.length === 0}}" class="no-data">
+    暂无排行榜数据
+  </view>
+
+  <!-- 底部固定排名显示 -->
+  <view class="current-rank" wx:if="{{currentUserRank > 0}}">
+    您在本小程序中排行第 {{currentUserRank}} 名
+  </view>
+</view>

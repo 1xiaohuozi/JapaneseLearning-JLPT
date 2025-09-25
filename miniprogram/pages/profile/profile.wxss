@@ -1,12 +1,24 @@
+
 .profile-container {
   padding: 80rpx 40rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: linear-gradient(135deg, #e0f2fe, #f8fafc);
   min-height: 100vh;
   box-sizing: border-box;
+  position: relative;   /* 让伪元素能绝对定位 */
+  overflow: hidden;     /* 防止内容滚动时背景偏移 */
 }
+
+/* 渐变背景层（和其他页面保持一致） */
+.profile-container::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(135deg, #a8edea, #fed6e3);
+  z-index: -1; /* 保证在所有内容后面 */
+}
+
 
 .profile-card {
   background-color: #ffffff;
@@ -18,7 +30,7 @@
   align-items: center;
   width: 100%;
   max-width: 640rpx;
-  margin-bottom: 100rpx;
+  margin-bottom: 60rpx;
   animation: fadeIn 0.6s ease-out;
 }
 
@@ -30,54 +42,113 @@
   box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.1);
 }
 
-.welcome {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 10rpx;
-}
-
 .user-id {
   font-size: 26rpx;
   color: #64748b;
 }
-
-.action-list {
-  width: 100%;
-  max-width: 640rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 32rpx;
+.review-sub {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #78350f;
 }
 
-.action-btn {
-  padding: 28rpx 0;
-  font-size: 40rpx;
+
+.review-card {
+  margin-top: 32rpx;
+  background: linear-gradient(135deg, #fcd34d, #facc15);
+  padding: 36rpx 40rpx;
+  border-radius: 24rpx;
+  box-shadow: 0 6rpx 16rpx rgba(250, 204, 21, 0.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: fadeInUp 0.8s ease-out;
+}
+
+.review-title {
+  font-size: 28rpx;
+  color: #92400e;
   font-weight: 600;
-  border-radius: 20rpx;
+  margin-bottom: 12rpx;
+}
+
+.review-count {
+  font-size: 64rpx;
+  font-weight: bold;
+  color: #78350f;
+}
+
+.next-jlpt {
+  margin-top: 12rpx;
+  font-size: 28rpx;
+  color: #d9534f;
+  font-weight: bold;
+}
+
+/* 新增网格布局 */
+.action-grid {
+  width: 100%;
+  max-width: 640rpx;
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* 一行两个 */
+  gap: 24rpx; /* 网格间距 */
+  margin-bottom: 60rpx;
+}
+
+/* 网格按钮样式 */
+.action-btn {
+  width: 100%;
+  padding: 28rpx 0;
+  font-size: 32rpx;
+  font-weight: 600;
+  border-radius: 24rpx;
   text-align: center;
   transition: all 0.3s ease;
 }
 
-.feedback-btn {
-  background: linear-gradient(to right, #3b82f6, #60a5fa);
+/* 不同按钮渐变色 */
+.favorites-btn {
+  background: linear-gradient(to right, #76e27b, #5244ca);
   color: white;
-  box-shadow: 0 6rpx 12rpx rgba(59, 130, 246, 0.3);
+  box-shadow: 0 6rpx 12rpx rgba(233, 67, 197, 0.3);
 }
-
+.leaderboard-btn {
+  background: linear-gradient(to right, #8b0724, #0a9751);
+  color: white;
+  box-shadow: 0 6rpx 12rpx rgba(233, 67, 197, 0.3);
+}
+.login-btn {
+  background: linear-gradient(to right, #10b981, #34d399);
+  color: white;
+  box-shadow: 0 6rpx 12rpx rgba(16, 185, 129, 0.3);
+}
+.memory-btn {
+  background: linear-gradient(to right, #f07c46, #5244ca);
+  color: white;
+  box-shadow: 0 6rpx 12rpx rgba(16, 185, 129, 0.3);
+}
+.abab-btn {
+  background: linear-gradient(to right, #47a00c, #60a5fa);
+  color: white;
+  box-shadow: 0 6rpx 12rpx rgba(177, 214, 9, 0.3);
+}
+.jlpt-btn {
+  background: linear-gradient(to right, #e97406, #0650aa);
+  color: white;
+  box-shadow: 0 6rpx 12rpx rgba(235, 33, 100, 0.3);
+}
 .logout-btn {
   background: linear-gradient(to right, #ef4444, #f87171);
   color: white;
   box-shadow: 0 6rpx 12rpx rgba(239, 68, 68, 0.3);
 }
 
+/* 动画效果 */
 @keyframes fadeIn {
-  0% {
-    opacity: 0;
-    transform: translateY(20rpx);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  0% { opacity: 0; transform: translateY(20rpx); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeInUp {
+  0% { opacity: 0; transform: translateY(40rpx); }
+  100% { opacity: 1; transform: translateY(0); }
 }

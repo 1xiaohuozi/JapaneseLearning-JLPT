@@ -26,7 +26,7 @@ Page({
 
       // 4. 跳转页面
       wx.switchTab({
-        url: '/pages/grammar/grammar'
+        url: '/pages/word-learning/word-learning'
       })
     } catch (err) {
       console.error('登录失败:', err)

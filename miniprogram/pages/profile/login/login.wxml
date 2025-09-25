@@ -1,7 +1,7 @@
 <view class="login-container">
   <view class="login-header">
     <image src="/images/avatar.png" mode="aspectFit"></image>
-    <text>日语N2语法学习</text>
+    <text>日语N2备考通学习</text>
   </view>
   
   <view class="login-form">

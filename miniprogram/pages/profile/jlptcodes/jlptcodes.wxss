@@ -1,0 +1,252 @@
+.container {
+  padding: 20rpx;
+}
+
+.title {
+  font-size: 40rpx;
+  font-weight: bold;
+  margin-bottom: 20rpx;
+  text-align: center;
+  color: #2c3e50;
+}
+
+.history-section {
+  margin-bottom: 30rpx;
+  text-align: center;
+}
+
+.history-btn {
+  background: linear-gradient(90deg, #3498db, #2980b9);
+  color: #fff;
+  padding: 20rpx 30rpx;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  margin-bottom: 20rpx;
+}
+
+.save-btn {
+  margin: 20rpx 0;
+  background: linear-gradient(90deg, #27ae60, #2ecc71);
+  color: #fff;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.section-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  margin-bottom: 20rpx;
+  color: #34495e;
+}
+
+.question-card {
+  padding: 20rpx;
+  border: 1px solid #eee;
+  border-radius: 16rpx;
+  margin-bottom: 20rpx;
+  background: #fff;
+  box-shadow: 0 4rpx 10rpx rgba(0,0,0,0.05);
+}
+
+.q-inputs {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 10rpx;
+}
+
+.q-input {
+  flex: 1;
+  padding: 16rpx;
+  border: 1px solid #ccc;
+  border-radius: 10rpx;
+  font-size: 28rpx;
+}
+
+.calc-btn {
+  margin: 40rpx 0;
+  background: linear-gradient(90deg, #ff7e5f, #feb47b);
+  color: #fff;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  font-size: 32rpx;
+  font-weight: bold;
+  box-shadow: 0 6rpx 12rpx rgba(0,0,0,0.2);
+}
+
+/* 弹窗 */
+.popup {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.popup-content {
+  background: #fff;
+  padding: 40rpx;
+  border-radius: 24rpx;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8rpx 20rpx rgba(0,0,0,0.2);
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.history-popup {
+  max-height: 80vh; /* 避免弹窗超出屏幕 */
+  overflow-y: auto; /* 超出内容可滚动 */
+  padding: 20rpx;
+  background-color: #fff;
+  border-radius: 16rpx;
+  position: relative;
+}
+/* 右上角关闭叉 */
+.close-icon {
+  position: absolute;
+  top: 12rpx;
+  right: 12rpx;
+  font-size: 50rpx;
+  color: rgb(0, 0, 0);
+  z-index: 1001;
+}
+.close-icon:hover {
+  color: #f44336;
+}
+
+.jlpt-stamp {
+  text-align: center;
+  margin-bottom: 20rpx;
+  font-weight: bold;
+  color: #d35400;
+  font-size: 28rpx;
+  letter-spacing: 4rpx;
+}
+
+.popup-header {
+  font-size: 34rpx;
+  font-weight: bold;
+  text-align: center;
+  margin: 20rpx 0;
+  color: #2c3e50;
+}
+
+.info {
+  font-size: 26rpx;
+  margin-bottom: 20rpx;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.card {
+  background: #f9f9f9;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10rpx;
+}
+
+.col {
+  width: 48%;
+  display: flex;
+  justify-content: space-between;
+  font-size: 28rpx;
+}
+
+.result-final {
+  text-align: center;
+  font-size: 32rpx;
+  font-weight: bold;
+  margin: 30rpx 0;
+  color: #27ae60;
+}
+
+.close-btn {
+  margin-top: 20rpx;
+  background: linear-gradient(90deg, #3498db, #2980b9);
+  color: #fff;
+  padding: 20rpx;
+  border-radius: 16rpx;
+}
+
+/* 历史记录样式 */
+.history-list {
+  margin-bottom: 20rpx;
+}
+
+.history-item {
+  padding: 20rpx;
+  margin-bottom: 15rpx;
+  border-left: 8rpx solid #3498db;
+}
+
+.history-item.pass {
+  border-left-color: #27ae60;
+}
+
+.history-item.fail {
+  border-left-color: #e74c3c;
+}
+
+.history-date {
+  font-weight: bold;
+  color: #2c3e50;
+  margin-bottom: 10rpx;
+}
+
+.history-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15rpx;
+  margin-bottom: 10rpx;
+  font-size: 26rpx;
+}
+
+.history-scores text {
+  background: #ecf0f1;
+  padding: 8rpx 16rpx;
+  border-radius: 8rpx;
+}
+
+.history-result {
+  text-align: center;
+  font-weight: bold;
+  padding: 10rpx;
+  border-radius: 8rpx;
+}
+
+.history-result.pass {
+  background: #d4f8e8;
+  color: #27ae60;
+}
+
+.history-result.fail {
+  background: #fde3e3;
+  color: #e74c3c;
+}
+
+.no-history {
+  text-align: center;
+  color: #7f8c8d;
+  padding: 40rpx;
+  font-size: 28rpx;
+}
+
+/* 动画 */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(40rpx); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.error-border { border-color: red; }
+.error-msg { color: red; font-size: 12px; margin-top: 3px; }

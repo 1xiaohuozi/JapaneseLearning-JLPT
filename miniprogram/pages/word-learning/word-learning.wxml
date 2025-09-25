@@ -1,0 +1,125 @@
+<view class="container">      
+  <!-- 背景 -->
+  <view class="bg"></view>
+
+  <!-- 顶部 Tab -->
+  <view class="tab-container">
+    <view class="tab-item {{currentTab==='study'?'active':''}}" bindtap="switchTab" data-tab="study">学习</view>
+    <view class="tab-item {{currentTab==='favorites'?'active':''}}" bindtap="switchTab" data-tab="favorites">收藏</view>
+    <view class="tab-item {{currentTab==='all'?'active':''}}" bindtap="switchTab" data-tab="all">单词列表</view>
+  </view>
+<!-- 公告提示 -->
+
+
+  <!-- 学习卡片 -->
+  <block wx:if="{{currentTab==='study'}}">
+    <view class="progress">
+      <text>{{currentIndex + 1}} / {{totalWords}}</text>
+    </view>
+
+    <view class="card-wrapper {{answered ? 'flipped' : ''}}">
+      <!-- 卡片正面（固定高度，内容居中，可滚动） -->
+      <view class="card front">
+        <scroll-view scroll-y="true" class="card-scroll front-scroll">
+          <view class="front-content">
+            <text class="word">{{currentWord.word}}</text>
+            <text class="level">级别: {{currentWord.level}}</text>
+          </view>
+          <text wx:if="{{currentWord.proficiency}}" class="proficiency-badge">✅ {{currentWord.proficiency}}</text>
+        </scroll-view>
+      </view>
+
+      <!-- 卡片背面（固定高度，内容从上往下滚动） -->
+      <view class="card back">
+        <scroll-view scroll-y="true" class="card-scroll">
+          <view class="detail-section card-section">
+            <text class="label">单词:</text>
+            <text class="content">{{currentWord.word}}</text>
+          </view>
+
+          <view class="detail-section card-section">
+            <text class="label">假名:</text>
+            <text class="content">{{currentWord.kana}}</text>
+          </view>
+
+          <view class="detail-section card-section">
+            <text class="label">意义:</text>
+            <text class="content">{{currentWord.meaning}}</text>
+          </view>
+
+          <view class="detail-section card-section">
+            <text class="label">例句:</text>
+            <view class="example-list">
+              <block wx:for="{{currentWord.examples}}" wx:key="index">
+                <view class="example-block">
+                  <view class="example-jp">📖 {{item.jp}}</view>
+                  <view class="example-zh">👉 {{item.zh}}</view>
+                </view>
+              </block>
+            </view>
+          </view>
+
+          <view class="detail-section card-section">
+            <text class="label">级别:</text>
+            <text class="content">{{currentWord.level}}</text>
+          </view>
+
+          <view wx:if="{{currentWord.proficiency}}" class="detail-section card-section">
+            <text class="label">积分:</text>
+            <text class="content" style="color:green;">✅ {{currentWord.proficiency}}</text>
+          </view>
+
+          <!-- 收藏按钮 -->
+          <view class="favorite-btn-wrapper">
+            <button class="btn btn-favorite" bindtap="toggleFavorite">
+              {{isFavorited ? "★ 已收藏" : "☆ 收藏"}}
+            </button>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+
+    <!-- 操作按钮（固定在卡片下方，不遮挡内容） -->
+    <view class="btn-group">
+      <block wx:if="{{!answered}}">
+        <button class="btn btn-right animate-btn" bindtap="chooseKnown" disabled="{{btnDisabled}}">认识</button>
+        <button class="btn btn-wrong animate-btn" bindtap="chooseUnknown" disabled="{{btnDisabled}}">不认识</button>
+      </block>
+
+      <block wx:elif="{{answered}}">
+        <button class="btn btn-next animate-btn" bindtap="nextWord">下一个 ➡️</button>
+      </block>
+    </view>
+  </block>
+
+  <!-- 我的收藏 -->
+  <block wx:elif="{{currentTab==='favorites'}}">
+    <scroll-view scroll-y="true" style="height: 80vh;" bindscrolltolower="loadMoreFavorites">
+      <view wx:for="{{favoriteWords}}" wx:key="_id" class="list-item" bindtap="viewWordDetail" data-id="{{item._id}}">
+        <text>{{item.word}} ({{item.level}})</text>
+        <text wx:if="{{item.proficiency}}" style="color:green;"> ✅ {{item.proficiency}}</text>
+      </view>
+      <view class="loading" wx:if="{{loadingFavorites}}">⏳ 正在加载收藏...</view>
+      <view class="no-more" wx:if="{{!hasMoreFavorites}}">没有更多了</view>
+    </scroll-view>
+  </block>
+
+  <!-- 所有单词列表 -->
+  <block wx:elif="{{currentTab==='all'}}">
+    <scroll-view scroll-y="true" style="height: 80vh;" bindscrolltolower="loadMoreWords">
+      <view wx:for="{{words}}" wx:key="_id" class="list-item" bindtap="viewWordDetail" data-id="{{item._id}}">
+        <text>{{item.word}} ({{item.level}})</text>
+        <text wx:if="{{item.proficiency}}" style="color:green;"> ✅ {{item.proficiency}}</text>
+      </view>
+      <view class="loading" wx:if="{{loadingWords}}">⏳ 正在加载单词...</view>
+      <view class="no-more" wx:if="{{!hasMoreWords}}">没有更多了</view>
+    </scroll-view>
+  </block>
+
+  <!-- 加载提示 -->
+  <block wx:else>
+    <view class="loading">
+      <text>⏳ 正在加载中...</text>
+    </view>
+  </block>
+</view>

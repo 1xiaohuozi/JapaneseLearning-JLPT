@@ -1,25 +1,40 @@
-<view class="profile-container">  
-  <view class="profile-card">
-    <image class="avatar" src="/images/avatar.png" mode="aspectFill" />
-    <view class="welcome">欢迎回来！</view>
-    <view class="user-id">用户 ID：{{userId}}</view>
-  </view>
+<view class="profile-container">    
 
-  <view class="action-list" style="width: 366rpx; display: flex; box-sizing: content-box">
-    <button class="action-btn feedback-btn" style="height: 150rpx; display: block; box-sizing: border-box; width: 366rpx" open-type="feedback">
-      💬 意见反馈
-    </button>
+<view class="profile-card">
+  <view class="next-jlpt">📅 距离最近一次 JLPT 考试还有 {{daysToNextJlpt}} 天</view>
+  <image class="avatar" src="/images/蓝宝书.png" mode="aspectFill" />
+  <view class="user-id">用户 ID：{{userId}}</view>
+  <view class="review-card">
+  <view class="review-title">📊 累计学习次数</view>
+  <view class="review-count">{{displayedTotalCount}}</view>
+  <view class="review-sub">
+    <text>单词: {{displayedWordCount}}</text> | 
+  <text>语法: {{displayedStudyCount}}</text> | 
+  <text>听力: {{displayedSpeakingCount}}</text>
+  
+</view>
 
-    <!-- 动态显示 登录 / 退出按钮 -->
-    <block wx:if="{{userId === '未登录'}}">
-      <button class="action-btn login-btn" bindtap="handleLogin" style="width: 366rpx; display: block; box-sizing: border-box;">
-        🔐 登录
-      </button>
-    </block>
-    <block wx:else>
-      <button class="action-btn logout-btn" bindtap="handleLogout" style="width: 366rpx; display: block; box-sizing: border-box;">
-        🚪 退出登录
-      </button>
-    </block>
-  </view>
+</view>
+
+
+
+</view>
+
+<!-- 网格按钮区域 -->
+<view class="action-grid">
+  <block wx:if="{{userId !== '未登录'}}">
+    <!-- <button class="action-btn favorites-btn" bindtap="navigateToFavorites">⭐ 我的收藏</button> -->
+    <button class="action-btn leaderboard-btn" bindtap="navigateToLeaderboard">🏆 排行榜</button>
+  </block>
+  <button class="action-btn jlpt-btn" bindtap="navigateToJlptCodes">📝 JLPT 估分器</button>
+  <button class="action-btn memory-btn" bindtap="navigateToMemory">🧩 语法联合记忆</button>
+  <button class="action-btn abab-btn" bindtap="navigateToAbabWords">📚 ABAB型词记忆</button>
+  <block wx:if="{{userId === '未登录'}}">
+    <button class="action-btn login-btn" bindtap="handleLogin">🔐 登录</button>
+  </block>
+  <block wx:else>
+    <button class="action-btn logout-btn" bindtap="handleLogout"  style="position: relative; left: 155rpx; top: 1rpx">🚪 退出登录</button>
+  </block>
+</view>
+
 </view>

@@ -1,0 +1,122 @@
+.container {
+  padding: 30rpx;
+  background-color: #f7f8fa;
+  min-height: 100vh;
+}
+
+.page-title {
+  font-size: 36rpx;
+  font-weight: bold;
+  margin-bottom: 30rpx;
+  text-align: center;
+  color: #333;
+  letter-spacing: 2rpx;
+}
+
+.leaderboard-item {
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx 25rpx;
+  margin-bottom: 15rpx;
+  background-color: #fff;
+  border-radius: 20rpx;
+  box-shadow: 0 5rpx 15rpx rgba(0,0,0,0.05);
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.leaderboard-item:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8rpx 20rpx rgba(0,0,0,0.1);
+}
+
+.rank-container {
+  width: 60rpx;
+  justify-content: center;
+  align-items: center;
+  margin-right: 15rpx;
+}
+
+.rank {
+  font-size: 32rpx;
+  color: #ff9800;
+  font-weight: bold;
+}
+
+.avatar {
+  width: 70rpx;
+  height: 70rpx;
+  border-radius: 50%;
+  margin-right: 20rpx;
+  border: 2rpx solid #eee;
+}
+
+.user-info {
+  flex: 1;
+  justify-content: center;
+}
+
+.username {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 8rpx;
+}
+
+.scores {
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.score {
+  font-size: 24rpx;
+  color: #666;
+}
+
+.score.total {
+  font-weight: bold;
+  color: #ff5722;
+}
+
+.highlight {
+  border: 3rpx solid #ff5722;
+  background-color: #fff3e0;
+  animation: pulse 1.2s infinite alternate;
+}
+
+.no-data {
+  text-align: center;
+  font-size: 28rpx;
+  color: #999;
+  margin-top: 50rpx;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 5rpx rgba(255,87,34,0.3); }
+  50% { box-shadow: 0 0 15rpx rgba(255,87,34,0.6); }
+  100% { box-shadow: 0 0 5rpx rgba(255,87,34,0.3); }
+}
+.current-rank {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 20rpx 0;
+  text-align: center;
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #fff;
+  background: linear-gradient(90deg, #ff5722, #ff9800, #ffc107, #ff5722);
+  background-size: 300% 100%;
+  animation: gradientMove 3s ease infinite;
+  box-shadow: 0 -5rpx 15rpx rgba(0,0,0,0.1);
+  z-index: 100;
+  border-top-left-radius: 20rpx;
+  border-top-right-radius: 20rpx;
+}
+
+@keyframes gradientMove {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 100% 0%; }
+  100% { background-position: 0% 0%; }
+}
+

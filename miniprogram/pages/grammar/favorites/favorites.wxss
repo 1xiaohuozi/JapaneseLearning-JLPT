@@ -270,13 +270,17 @@
 .hover-effect:hover {
   cursor: pointer;
 }
-.favorite-icon {
-  width: 48rpx;
-  height: 48rpx;
-  margin-left: 16rpx;
-  transition: transform 0.3s ease;
+.favorite-time {
+  font-size: 12px;
+  color: #888;
+  margin-left: auto;
+  font-style: italic;
 }
-
-.favorite-icon:active {
-  transform: scale(1.2);
+.unfavorite-btn {
+  margin-top: 20rpx;
+  background-color: #ff4d4f;
+  color: white;
+  padding: 20rpx 0;
+  font-size: 28rpx;
+  border-radius: 12rpx;
 }
