@@ -160,7 +160,7 @@ Page({
   // 分享
   onShareAppMessage() {
     return {
-      title: '日语N2备考通速记 - 高效备考工具',
+      title: '日语备考通速记 - 高效备考工具',
       path: '/pages/grammar/grammar',
       imageUrl: '../../images/蓝宝书.png'
     }

@@ -332,4 +332,16 @@
 .tab:hover {
   filter: brightness(1.05);
 }
+.notice-banner {
+  margin: 20rpx auto;
+  padding: 16rpx 24rpx;
+  background: linear-gradient(to right, #e0f7fa, #f1f5f9);
+  border-radius: 16rpx;
+  font-size: 26rpx;
+  color: #0f172a;
+  text-align: center;
+  width: 90%;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.05);
+}
+
 

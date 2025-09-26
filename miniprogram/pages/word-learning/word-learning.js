@@ -236,44 +236,46 @@ Page({
   // 下一个单词
   async nextWord() {
     const { currentIndex, words, hasMoreWords } = this.data;
-
-    // 1. 当前数组里找
+  
+    // 找到下一个未学习的单词
+    let nextIndex = -1;
     for (let i = currentIndex + 1; i < words.length; i++) {
       if (!words[i].proficiency || words[i].proficiency === 0) {
-        this.setData({
-          currentIndex: i,
-          currentWord: words[i],
-          lastChoice: null,
-          answered: false
-        });
-        this.checkFavorite(words[i]._id);
-        this.saveProgress();
-        return;
+        nextIndex = i;
+        break;
       }
     }
-
-    // 2. 尝试加载下一批
-    if (hasMoreWords) {
+  
+    // 如果当前批次没有，就加载下一批
+    if (nextIndex === -1 && hasMoreWords) {
       await this.loadMoreWords();
-      const newWords = this.data.words;
-      for (let i = currentIndex + 1; i < newWords.length; i++) {
-        if (!newWords[i].proficiency || newWords[i].proficiency === 0) {
-          this.setData({
-            currentIndex: i,
-            currentWord: newWords[i],
-            lastChoice: null,
-            answered: false
-          });
-          this.checkFavorite(newWords[i]._id);
-          this.saveProgress();
-          return;
+      for (let i = currentIndex + 1; i < this.data.words.length; i++) {
+        if (!this.data.words[i].proficiency || this.data.words[i].proficiency === 0) {
+          nextIndex = i;
+          break;
         }
       }
     }
-
-    // 3. 全部学完
-    // wx.showToast({ title: "全部学习完毕！", icon: "success" });
-  },
+  
+    // 没有下一个了
+    if (nextIndex === -1) {
+      // wx.showToast({ title: "全部学习完毕！", icon: "success" });
+      return;
+    }
+  
+    // 🚩 关键：先重置 answered，等待动画复位
+    this.setData({ answered: false, lastChoice: null });
+  
+    setTimeout(() => {
+      this.setData({
+        currentIndex: nextIndex,
+        currentWord: this.data.words[nextIndex],
+      });
+      this.checkFavorite(this.data.words[nextIndex]._id);
+      this.saveProgress();
+    }, 300); // 这里的 300ms 需要和你的翻转动画时长一致
+  }
+  ,
 // ✅ 正确放在 Page({}) 里面的方法
 async markLearnedStatus(words) {
   const userId = wx.getStorageSync("userId") || "guest";

@@ -515,7 +515,7 @@ async showGrammarDetailById(grammarId) {
 onShareAppMessage() {
   const { currentGrammar, searchText, mode } = this.data;
   
-  let title = '日语N2备考通速记 - 高效备考工具';
+  let title = '日语备考通速记 - 高效备考工具';
   let path = '/pages/grammar/grammar';
   
   if (currentGrammar) {

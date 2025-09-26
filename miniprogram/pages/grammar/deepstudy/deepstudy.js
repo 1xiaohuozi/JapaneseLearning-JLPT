@@ -376,7 +376,7 @@ Page({
   },
   onShareAppMessage() {
     return {
-      title: '日语N2备考通速记 - 高效备考工具',
+      title: '日语备考通速记 - 高效备考工具',
       path: '/pages/grammar/grammar',
       imageUrl: '../../images/蓝宝书.png' // 准备一张分享图片
     }
