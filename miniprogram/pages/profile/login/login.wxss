@@ -1,42 +1,96 @@
+/* 整体容器 */
 .login-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   height: 100vh;
-  background-color: #f5f5f5;
+  padding: 60rpx 40rpx;
+  position: relative;
+  box-sizing: border-box;
 }
 
+/* 背景渐变 */
+.bg-gradient {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(135deg, #74ebd5, #ACB6E5);
+  z-index: -1;
+}
+
+/* 顶部 logo 与标题 */
 .login-header {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: 40px;
+  margin-top: 10vh;
+  text-align: center;
+}
+.logo {
+  width: 180rpx;
+  height: 180rpx;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 8rpx 30rpx rgba(0,0,0,0.15);
+  margin-bottom: 30rpx;
+}
+.app-title {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #fff;
+  letter-spacing: 2rpx;
+}
+.app-subtitle {
+  font-size: 26rpx;
+  color: rgba(255,255,255,0.85);
+  margin-top: 10rpx;
 }
 
-.login-header image {
-  width: 100px;
-  height: 100px;
-  margin-bottom: 15px;
+/* 登录卡片 */
+.login-card {
+  width: 100%;
+  background: rgba(255,255,255,0.95);
+  border-radius: 30rpx;
+  padding: 60rpx 40rpx;
+  box-shadow: 0 10rpx 30rpx rgba(0,0,0,0.1);
+  text-align: center;
+  margin-top: 60rpx;
 }
 
-.login-header text {
-  font-size: 18px;
-  color: #333;
-}
-
-.login-form {
-  width: 80%;
-}
-
+/* 登录按钮 */
 .login-btn {
   width: 100%;
-  margin-bottom: 15px;
-  background-color: #1E90FF;
+  height: 90rpx;
+  border-radius: 45rpx;
+  background: linear-gradient(135deg, #36D1DC, #5B86E5);
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6rpx 20rpx rgba(91,134,229,0.4);
+  transition: transform 0.2s ease;
+}
+.login-btn:active {
+  transform: scale(0.96);
+}
+.btn-icon {
+  margin-right: 12rpx;
+  font-size: 34rpx;
 }
 
+/* 提示文字 */
 .login-tip {
-  font-size: 12px;
-  color: #999;
-  text-align: center;
+  margin-top: 30rpx;
+  font-size: 26rpx;
+  color: #666;
+  line-height: 1.6;
+}
+
+/* 页脚 */
+.login-footer {
+  font-size: 22rpx;
+  color: rgba(255,255,255,0.8);
+  margin-bottom: 20rpx;
 }

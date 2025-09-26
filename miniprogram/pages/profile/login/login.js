@@ -28,6 +28,10 @@ Page({
       wx.switchTab({
         url: '/pages/word-learning/word-learning'
       })
+      wx.showToast({
+        title: '登录成功',
+        icon: 'success'
+      })
     } catch (err) {
       console.error('登录失败:', err)
       wx.showToast({

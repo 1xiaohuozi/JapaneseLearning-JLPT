@@ -1,21 +1,31 @@
 <view class="login-container">
+  <!-- 背景渐变装饰 -->
+  <view class="bg-gradient"></view>
+
+  <!-- 顶部 Logo + 标题 -->
   <view class="login-header">
-    <image src="/images/avatar.png" mode="aspectFit"></image>
-    <text>日语备考通学习</text>
+    <image src="/images/日语备考通头像.png" mode="aspectFit" class="logo"></image>
+    <text class="app-title">日语备考通学习</text>
+    <text class="app-subtitle">专属你的日语学习助手</text>
   </view>
-  
-  <view class="login-form">
+
+  <!-- 登录表单卡片 -->
+  <view class="login-card">
     <button 
       type="primary" 
       bindtap="onLoginTap"
       class="login-btn"
     >
-      微信一键登录
+      <text class="btn-icon">🔑</text> 微信一键登录
     </button>
-    
-    
+
     <view class="login-tip">
-      登录后可以保存学习进度和熟练度
+      登录后可同步学习进度、收藏与熟练度
     </view>
+  </view>
+
+  <!-- 页脚 -->
+  <view class="login-footer">
+    <text>© 2025 日语备考通</text>
   </view>
 </view>

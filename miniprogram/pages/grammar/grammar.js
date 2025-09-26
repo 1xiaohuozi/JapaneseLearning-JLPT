@@ -428,10 +428,7 @@ async checkFavoriteStatus(grammar_id) {
 
 // 修改：切换收藏状态
 async toggleFavorite() {
-  if (!this.data.isLoggedIn) {
-    wx.showToast({ title: '请先登录', icon: 'none' });
-    return;
-  }
+  if (!this.checkLogin()) return; 
 
   if (!this.data.currentGrammar) {
     return;
