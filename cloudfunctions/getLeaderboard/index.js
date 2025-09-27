@@ -1,4 +1,4 @@
-// cloud function: getLeaderboard
+// cloudfunctions/getLeaderboard/index.js
 const cloud = require('wx-server-sdk')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -29,7 +29,7 @@ exports.main = async (event, context) => {
       const agg = await db.collection('user_study_records')
         .aggregate()
         .project({
-          userId: { $ifNull: ['$user_id', '$userId'] },
+          userId: { $ifNull: ['$user_id', { $ifNull: ['$_openid', '$userId'] }] },
           study: { $ifNull: ['$review_count', 0] },
           speak: { $literal: 0 },
           word: { $literal: 0 }
@@ -39,7 +39,7 @@ exports.main = async (event, context) => {
           pipeline: [
             {
               project: {
-                userId: { $ifNull: ['$user_id', '$userId'] },
+                userId: { $ifNull: ['$user_id', { $ifNull: ['$_openid', '$userId'] }] },
                 study: { $literal: 0 },
                 speak: { $ifNull: ['$play_count', 0] },
                 word: { $literal: 0 }
@@ -52,10 +52,10 @@ exports.main = async (event, context) => {
           pipeline: [
             {
               project: {
-                userId: { $ifNull: ['$user_id', '$userId'] },
+                userId: { $ifNull: ['$user_id', { $ifNull: ['$_openid', '$userId'] }] },
                 study: { $literal: 0 },
                 speak: { $literal: 0 },
-                word: { $ifNull: ['$proficiency', 0] } // ✅ 改为统计 proficiency
+                word: { $ifNull: ['$proficiency', 0] }
               }
             }
           ]
@@ -91,17 +91,17 @@ exports.main = async (event, context) => {
         const [uStudy, uSpeak, uWord] = await Promise.all([
           db.collection('user_study_records')
             .aggregate()
-            .match({ $or: [{ user_id: currentUserId }, { userId: currentUserId }] })
+            .match({ $or: [{ user_id: currentUserId }, { _openid: currentUserId }, { userId: currentUserId }] })
             .group({ _id: null, studyTotal: $.sum('$review_count') })
             .end(),
           db.collection('user_speaking_records')
             .aggregate()
-            .match({ $or: [{ user_id: currentUserId }, { userId: currentUserId }] })
+            .match({ $or: [{ user_id: currentUserId }, { _openid: currentUserId }, { userId: currentUserId }] })
             .group({ _id: null, speakingTotal: $.sum('$play_count') })
             .end(),
           db.collection('user_word_records')
             .aggregate()
-            .match({ $or: [{ user_id: currentUserId }, { userId: currentUserId }] })
+            .match({ $or: [{ user_id: currentUserId }, { _openid: currentUserId }, { userId: currentUserId }] })
             .group({ _id: null, wordTotal: $.sum('$proficiency') })
             .end()
         ])
@@ -115,7 +115,7 @@ exports.main = async (event, context) => {
         const gtRes = await db.collection('user_study_records')
           .aggregate()
           .project({
-            userId: { $ifNull: ['$user_id', '$userId'] },
+            userId: { $ifNull: ['$user_id', { $ifNull: ['$_openid', '$userId'] }] },
             study: { $ifNull: ['$review_count', 0] },
             speak: { $literal: 0 },
             word: { $literal: 0 }
@@ -123,13 +123,27 @@ exports.main = async (event, context) => {
           .unionWith({
             coll: 'user_speaking_records',
             pipeline: [
-              { project: { userId: { $ifNull: ['$user_id', '$userId'] }, study: { $literal: 0 }, speak: { $ifNull: ['$play_count', 0] }, word: { $literal: 0 } } }
+              {
+                project: {
+                  userId: { $ifNull: ['$user_id', { $ifNull: ['$_openid', '$userId'] }] },
+                  study: { $literal: 0 },
+                  speak: { $ifNull: ['$play_count', 0] },
+                  word: { $literal: 0 }
+                }
+              }
             ]
           })
           .unionWith({
             coll: 'user_word_records',
             pipeline: [
-              { project: { userId: { $ifNull: ['$user_id', '$userId'] }, study: { $literal: 0 }, speak: { $literal: 0 }, word: { $ifNull: ['$proficiency', 0] } } }
+              {
+                project: {
+                  userId: { $ifNull: ['$user_id', { $ifNull: ['$_openid', '$userId'] }] },
+                  study: { $literal: 0 },
+                  speak: { $literal: 0 },
+                  word: { $ifNull: ['$proficiency', 0] }
+                }
+              }
             ]
           })
           .group({
@@ -146,24 +160,33 @@ exports.main = async (event, context) => {
 
       return { success: true, leaderboard, currentUser }
     } catch (unionErr) {
-      console.warn('unionWith 聚合失败，走兼容模式:', unionErr)
+      console.warn('⚠️ unionWith 聚合失败，走兼容模式:', unionErr)
     }
 
     // ---------- 兼容模式 ----------
     const [studyRes, speakRes, wordRes] = await Promise.all([
       db.collection('user_study_records')
         .aggregate()
-        .project({ userId: { $ifNull: ['$user_id', '$userId'] }, val: { $ifNull: ['$review_count', 0] } })
+        .project({
+          userId: { $ifNull: ['$user_id', { $ifNull: ['$_openid', '$userId'] }] },
+          val: { $ifNull: ['$review_count', 0] }
+        })
         .group({ _id: '$userId', studyTotal: $.sum('$val') })
         .end(),
       db.collection('user_speaking_records')
         .aggregate()
-        .project({ userId: { $ifNull: ['$user_id', '$userId'] }, val: { $ifNull: ['$play_count', 0] } })
+        .project({
+          userId: { $ifNull: ['$user_id', { $ifNull: ['$_openid', '$userId'] }] },
+          val: { $ifNull: ['$play_count', 0] }
+        })
         .group({ _id: '$userId', speakingTotal: $.sum('$val') })
         .end(),
       db.collection('user_word_records')
         .aggregate()
-        .project({ userId: { $ifNull: ['$user_id', '$userId'] }, val: { $ifNull: ['$proficiency', 0] } })
+        .project({
+          userId: { $ifNull: ['$user_id', { $ifNull: ['$_openid', '$userId'] }] },
+          val: { $ifNull: ['$proficiency', 0] }
+        })
         .group({ _id: '$userId', wordTotal: $.sum('$val') })
         .end()
     ])

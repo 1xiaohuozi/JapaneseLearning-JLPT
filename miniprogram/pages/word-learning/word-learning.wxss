@@ -318,4 +318,95 @@
 .btn-audio-example:active {
   transform: scale(0.95);
 }
+.detail-modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+  opacity: 0;
+  animation: fadeIn 0.3s ease forwards; /* 弹窗背景渐入 */
+}
 
+.detail-box {
+  background: #fff;
+  width: 80%;
+  max-height: 70%;
+  border-radius: 20rpx;
+  padding: 30rpx;
+  overflow-y: auto;
+  box-shadow: 0 8rpx 20rpx rgba(0,0,0,0.2);
+  position: relative;
+  transform: scale(0.8);
+  opacity: 0;
+  animation: scaleIn 0.3s ease forwards; /* 内容缩放渐入 */
+}
+
+/* 关闭按钮 hover 效果 */
+.detail-close {
+  position: absolute;
+  top: 20rpx;
+  right: 20rpx;
+  background: transparent;
+  border: none;
+  font-size: 32rpx;
+  color: #999;
+  transition: transform 0.2s, color 0.2s;
+}
+.detail-close:hover {
+  transform: rotate(90deg);
+  color: #333;
+}
+
+/* 动画关键帧 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  font-size: 34rpx;
+  font-weight: bold;
+  margin-bottom: 20rpx;
+}
+
+.detail-word {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.detail-kana {
+  margin-left: 10rpx;
+  font-size: 28rpx;
+  color: #888;
+}
+
+.detail-meta {
+  font-size: 24rpx;
+  color: #666;
+  margin-bottom: 15rpx;
+}
+
+.detail-meaning {
+  font-size: 28rpx;
+  margin: 20rpx 0;
+  color: #333;
+}
+
+.detail-example {
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+.detail-example .jp { color: #222; }
+.detail-example .zh { color: #555; }

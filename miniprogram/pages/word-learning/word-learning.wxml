@@ -129,4 +129,47 @@
       <view class="no-more" wx:if="{{!hasMoreWords}}">没有更多了</view>
     </scroll-view>
   </block>
+  <!-- 单词详情弹窗 -->
+<view wx:if="{{showDetail}}" class="detail-modal">
+  <view class="detail-box">
+    <!-- 关闭按钮 -->
+    <button class="detail-close" bindtap="closeDetail">✖</button>
+
+    <!-- 单词 + 假名 -->
+    <view class="detail-header">
+      <text class="detail-word">{{detailWord.word}}</text>
+      <text class="detail-kana">（{{detailWord.kana}}）</text>
+      <button wx:if="{{detailWord.sounds && detailWord.sounds.length>0}}" 
+              class="btn-audio" 
+              data-src="{{detailWord.sounds[0].fileid}}" 
+              bindtap="playAudio">🔊</button>
+    </view>
+
+    <!-- 词性 + 声调 -->
+    <view class="detail-meta">
+      <text class="meta">{{detailWord.pos}}</text>
+      <text class="meta">声调: {{detailWord.accent}}</text>
+    </view>
+
+    <!-- 中文释义 -->
+    <view class="detail-meaning">
+      <text>{{detailWord.meaning}}</text>
+    </view>
+
+    <!-- 例句 -->
+    <view class="detail-example">
+      <text class="jp">📖 {{detailWord.example_jp}}</text>
+      <text class="zh">👉 {{detailWord.example_zh_cn}}</text>
+
+      <!-- 例句朗读按钮 -->
+      <button wx:if="{{detailWord.sounds && detailWord.sounds.length>1}}"  
+              class="btn-audio-example" 
+              data-src="{{detailWord.sounds[1].fileid}}" 
+              bindtap="playAudio">
+        🔊 例句朗读
+      </button>
+    </view>
+  </view>
+</view>
+
 </view>

@@ -34,7 +34,8 @@ Page({
     answered: false,          // 翻卡状态
     lastChoice: null,         // 上一次选择
     btnDisabled: false,       // 防止重复点击
-
+    showDetail: false,
+    detailWord: {},
     // 分页状态（词列表）
     page: 0,
     pageSize: PAGE_SIZE_DEFAULT,
@@ -266,7 +267,7 @@ Page({
         title: '加载上次进度中...',
         icon: 'loading',
         mask: true,       // 👈 避免用户乱点
-        duration: 5000   // 👈 给个足够大的值，手动关闭
+        duration: 1000   // 👈 给个足够大的值，手动关闭
       });
   
       db.collection('user_word_progress')
@@ -860,4 +861,22 @@ Page({
     }
     return true;
   },
+  // 打开详情弹窗
+viewWordDetail(e) {
+  const wordId = e.currentTarget.dataset.id;
+  const word = this.data.words.find(w => w._id === wordId)
+    || this.data.favoriteWords.find(w => w._id === wordId);
+
+  if (word) {
+    this.setData({
+      showDetail: true,
+      detailWord: word
+    });
+  }
+},
+
+// 关闭详情弹窗
+closeDetail() {
+  this.setData({ showDetail: false, detailWord: {} });
+},
 });
