@@ -1,40 +1,66 @@
-<view class="profile-container">    
+<scroll-view class="profile-page" scroll-y enable-flex>
+  <view class="hero-card">
+    <view class="hero-glow hero-glow-one"></view>
+    <view class="hero-glow hero-glow-two"></view>
 
-<view class="profile-card">
-  <view class="next-jlpt">📅 距离最近一次 JLPT 考试还有 {{daysToNextJlpt}} 天</view>
-  <image class="avatar" src="/images/蓝宝书.png" mode="aspectFill" />
-  <view class="user-id">用户 ID：{{userId}}</view>
-  <view class="review-card">
-  <view class="review-title">📊 累计学习次数</view>
-  <view class="review-count">{{displayedTotalCount}}</view>
-  <view class="review-sub">
-    <text>单词: {{displayedWordCount}}</text> | 
-  <text>语法: {{displayedStudyCount}}</text> | 
-  <text>听力: {{displayedSpeakingCount}}</text>
-  
-</view>
+    <view class="hero-top">
+      <view>
+        <text class="hero-eyebrow">个人主页</text>
+        <text class="hero-title">{{isLoggedIn ? '继续你的日语节奏' : '登录后同步你的学习记录'}}</text>
+      </view>
+      <view class="avatar-shell">
+        <image class="avatar" src="/images/蓝宝书.png" mode="aspectFill" />
+      </view>
+    </view>
 
-</view>
+    <view class="hero-badges">
+      <view class="hero-badge primary">
+        <text class="badge-label">JLPT 倒计时</text>
+        <text class="badge-value">{{daysToNextJlpt}} 天</text>
+        <text class="badge-sub">{{examMonthLabel}} 考试</text>
+      </view>
+      <view class="hero-badge secondary">
+        <text class="badge-label">账号状态</text>
+        <text class="badge-value">{{isLoggedIn ? '已登录' : '游客模式'}}</text>
+        <text class="badge-sub">{{userDisplayId}}</text>
+      </view>
+    </view>
+  </view>
 
+  <view class="tool-section">
+    <view class="tool-section-head">
+      <text class="section-kicker">快捷入口</text>
+      <text class="section-title">常用功能</text>
+    </view>
 
+    <view class="tool-grid">
+      <view class="tool-card accent-orange" bindtap="navigateToJlptCodes">
+        <text class="tool-title">JLPT 估分器</text>
+        <text class="tool-desc">记录分项表现，估算总分</text>
+      </view>
 
-</view>
+      <view class="tool-card accent-emerald" bindtap="navigateToMemory">
+        <text class="tool-title">语法联合记忆</text>
+        <text class="tool-desc">把语法点串起来复习</text>
+      </view>
 
-<!-- 网格按钮区域 -->
-<view class="action-grid">
-  <block wx:if="{{userId !== '未登录'}}">
-    <!-- <button class="action-btn favorites-btn" bindtap="navigateToFavorites">⭐ 我的收藏</button> -->
-    <button class="action-btn leaderboard-btn" bindtap="navigateToLeaderboard">🏆 排行榜</button>
-  </block>
-  <button class="action-btn jlpt-btn" bindtap="navigateToJlptCodes">📝 JLPT 估分器</button>
-  <button class="action-btn memory-btn" bindtap="navigateToMemory">🧩 语法联合记忆</button>
-  <button class="action-btn abab-btn" bindtap="navigateToAbabWords">📚 ABAB型词记忆</button>
-  <block wx:if="{{userId === '未登录'}}">
-    <button class="action-btn login-btn" bindtap="handleLogin">🔐 登录</button>
-  </block>
-  <block wx:else>
-    <button class="action-btn logout-btn" bindtap="handleLogout"  style="position: relative; left: 155rpx; top: 1rpx">🚪 退出登录</button>
-  </block>
-</view>
+      <view class="tool-card accent-sky" bindtap="navigateToAbabWords">
+        <text class="tool-title">ABAB 词记忆</text>
+        <text class="tool-desc">用联想方式记忆易混单词</text>
+      </view>
+    </view>
+  </view>
 
-</view>
+  <view class="account-panel">
+    <view class="account-copy">
+      <text class="section-kicker">账号操作</text>
+      <text class="section-title">{{isLoggedIn ? '保持同步，持续积累' : '登录后开启同步体验'}}</text>
+      <text class="account-desc">
+        {{isLoggedIn ? '当前账号已启用学习数据同步，你可以在不同设备继续学习。' : '登录后可以保存学习记录，并同步你的单词与听力进度。'}}
+      </text>
+    </view>
+
+    <button wx:if="{{!isLoggedIn}}" class="account-btn login" bindtap="handleLogin">立即登录</button>
+    <button wx:else class="account-btn logout" bindtap="handleLogout">退出登录</button>
+  </view>
+</scroll-view>

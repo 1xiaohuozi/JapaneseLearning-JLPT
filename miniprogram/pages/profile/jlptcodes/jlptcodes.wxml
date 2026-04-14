@@ -1,147 +1,145 @@
-<view class="container"> 
-  <view class="title">JLPT N2 分数計算器</view>
-  
-  <!-- 历史记录按钮 -->
-  <view class="history-section">
- 
+<scroll-view class="score-page" scroll-y enable-flex>
+  <view class="hero-card">
+    <text class="hero-kicker">JLPT 模拟估分</text>
+    <text class="hero-title">{{levelConfig.title}} 估分器</text>
+    <text class="hero-desc">按分项正确率折算为官方分值区间，用于模拟合格线判断，不等同于官方最终出分。</text>
 
-    <button class="history-btn" bindtap="showHistory">查看历史记录</button>
+    <view class="hero-badges">
+      <view class="hero-badge">
+        <text class="badge-label">总分线</text>
+        <text class="badge-value">{{levelConfig.overallPass}} / {{levelConfig.totalScore}}</text>
+      </view>
+      <view class="hero-badge">
+        <text class="badge-label">分项门槛</text>
+        <text class="badge-value">{{currentLevel === 'N4' || currentLevel === 'N5' ? '38 / 19' : '19 / 19 / 19'}}</text>
+      </view>
+    </view>
   </view>
 
-  <!-- 输入区 -->
-  <block wx:for="{{sections}}" wx:key="title" wx:for-index="sIndex">
-    <view class="section card animated-fade-in">
-      <view class="section-title">{{item.title}}</view>
-      <block wx:for="{{item.questions}}" wx:key="index">
-        <view class="question-card">
-          <text class="q-label">問題{{item.index}}</text>
-          <view class="q-inputs">
-            <input type="number" class="q-input"
-                   placeholder="{{item.placeholder}}"
-                   data-sid="{{sIndex}}" data-qid="{{item.index}}"
-                   bindinput="onInputTotal"/>
-            <input type="number" class="q-input"
-                   placeholder="正确数"
-                   data-sid="{{sIndex}}" data-qid="{{item.index}}"
-                   bindinput="onInputCorrect"/>
+  <view class="level-tabs">
+    <block wx:for="{{levelTabs}}" wx:key="*this">
+      <view class="level-chip {{item === currentLevel ? 'active' : ''}}" data-level="{{item}}" bindtap="switchLevel">{{item}}</view>
+    </block>
+  </view>
+
+  <view class="action-row">
+    <button class="ghost-btn" bindtap="showHistory">历史记录</button>
+  </view>
+
+  <view class="section-list">
+    <block wx:for="{{levelConfig.sections}}" wx:key="key" wx:for-index="index">
+      <view class="section-card">
+        <view class="section-head">
+          <view>
+            <text class="section-title">{{item.title}}</text>
+            <text class="section-subtitle">{{item.subtitle}}</text>
+          </view>
+          <view class="score-badge">{{item.scoreMax}} 分</view>
+        </view>
+
+        <view class="input-grid">
+          <view class="input-card">
+            <text class="input-label">总题数</text>
+            <input
+              type="number"
+              class="score-input"
+              placeholder="{{item.placeholder}}"
+              value="{{sectionInputs[index].total}}"
+              data-index="{{index}}"
+              bindinput="onInputTotal"
+            />
+          </view>
+
+          <view class="input-card">
+            <text class="input-label">做对题数</text>
+            <input
+              type="number"
+              class="score-input"
+              placeholder="例如 20"
+              value="{{sectionInputs[index].correct}}"
+              data-index="{{index}}"
+              bindinput="onInputCorrect"
+            />
           </view>
         </view>
-      </block>
-    </view>
-  </block>
 
-  <!-- 计算按钮 -->
-  <button class="calc-btn" bindtap="calcScore">查看結果</button>
+        <text class="section-hint">合格门槛：{{item.passMark}} 分</text>
+      </view>
+    </block>
+  </view>
 
-  <!-- 保存按钮 -->
+  <button class="calc-btn" bindtap="calcScore">立即估分</button>
 
-
-  <!-- 结果弹窗 -->
   <view class="popup" hidden="{{!showPopup}}">
-    <view class="popup-content animated-fade-in">
-      <!-- 顶部印章 -->
-      <view class="jlpt-stamp">
-        <text>JLPT試験</text>
-        <text>結果通知</text>
-        <text>能力認定</text>
+    <view class="popup-content result-popup">
+      <view class="result-header">
+        <text class="result-kicker">估分结果</text>
+        <text class="result-title">{{result.level}} 模拟成绩单</text>
+        <text class="result-date">{{result.date}}</text>
       </view>
 
-      <!-- 标题 -->
-      <view class="popup-header">結果通知書 (Test Result)</view>
-      <!-- <button class="save-btn" bindtap="saveScore" wx:if="{{showSaveBtn}}">保存本次估分</button> -->
-      <!-- 基本信息 -->
-      <view class="info">
-        <text>受験日：{{result.date}}</text>
-        <text> || </text>
-        <text>レベル: N2</text>
+      <view class="final-score-card {{result.pass ? 'pass' : 'fail'}}">
+        <text class="final-score-label">估算总分</text>
+        <text class="final-score-value">{{result.total}} / {{result.totalScore}}</text>
+        <text class="final-score-status">{{result.pass ? '预计合格' : '预计未达线'}}</text>
       </view>
 
-      <!-- 分数表格 -->
-      <view class="score-table card">
-        <view class="row">
-          <view class="col">
-            <text>文字・語彙：</text>
-            <text>{{result.vocabGrammar}} / 60</text>
-          </view>
-          <view class="col">
-            <text>読解：</text>
-            <text>{{result.reading}} / 60</text>
-          </view>
-        </view>
-        <view class="row">
-          <view class="col">
-            <text>聴解：</text>
-            <text>{{result.listening}} / 60</text>
-          </view>
-          <view class="col">
-            <text>総合：</text>
-            <text>{{result.total}} / 180</text>
-          </view>
-        </view>
-      </view>
-
-      <!-- 等级判定 -->
-      <view class="grade-table card">
-        <view class="row">
-          <view class="col">
-            <text>文字・語彙</text>
-            <text>{{result.grade.vocab}}</text>
-          </view>
-          <view class="col">
-            <text>文法</text>
-            <text>{{result.grade.grammar}}</text>
-          </view>
-        </view>
-        <view class="row">
-          <view class="col">
-            <text>読解</text>
-            <text>{{result.grade.reading}}</text>
-          </view>
-          <view class="col">
-            <text>聴解</text>
-            <text>{{result.grade.listening}}</text>
-          </view>
-        </view>
-      </view>
-
-      <!-- 判定 -->
-      <view class="result-final">
-        <text>{{result.pass ? '✅ 合格 / Passed' : '❌ 不合格 / Not Pass'}}</text>
-      </view>
-
-      <!-- 关闭按钮 -->
-      <button class="close-btn" bindtap="closePopup">关闭</button>
-    </view>
-  </view>
-
-  <!-- 历史记录弹窗 -->
-  <view class="popup" hidden="{{!showHistoryPopup}}">
-    <view class="popup-content history-popup">
-      <view class="close-icon" bindtap="closeHistoryPopup">×</view>
-      <view class="popup-header">历史估分记录</view>
-      
-      <view class="history-list">
-        <block wx:for="{{historyList}}" wx:key="_id">
-          <view class="history-item card" bindtap="selectHistory" data-item="{{item}}">
-            <view class="history-date">{{item.date}}</view>
-            <view class="history-scores">
-              <text>总分: {{item.total}}</text>
-              <text>文字語彙: {{item.vocabGrammar}}</text>
-              <text>読解: {{item.reading}}</text>
-              <text>聴解: {{item.listening}}</text>
+      <view class="result-section-list">
+        <block wx:for="{{result.sectionScores}}" wx:key="key">
+          <view class="result-section-card">
+            <view class="result-section-head">
+              <text class="result-section-title">{{item.title}}</text>
+              <text class="result-grade">{{item.grade}}</text>
             </view>
-            <view class="history-result {{item.pass ? 'pass' : 'fail'}}">
-              {{item.pass ? '合格' : '不合格'}}
+            <view class="result-row">
+              <text>估算分数</text>
+              <text>{{item.score}} / {{item.scoreMax}}</text>
+            </view>
+            <view class="result-row">
+              <text>原始作答</text>
+              <text>{{item.correct}} / {{item.total}}</text>
+            </view>
+            <view class="result-row">
+              <text>门槛</text>
+              <text class="{{item.pass ? 'pass-text' : 'fail-text'}}">{{item.passMark}} 分 {{item.pass ? '达标' : '未达标'}}</text>
             </view>
           </view>
         </block>
       </view>
 
-      <view wx:if="{{historyList.length === 0}}" class="no-history">
-        暂无历史记录
+      <view class="result-note">
+        <text>说明：JLPT 官方采用 scaled score，本站按分项正确率折算为估算分，仅用于模拟判断。</text>
       </view>
+
+      <button class="close-btn" bindtap="closePopup">关闭</button>
+    </view>
+  </view>
+
+  <view class="popup" hidden="{{!showHistoryPopup}}">
+    <view class="popup-content history-popup">
+      <view class="popup-header-row">
+        <text class="history-title">历史估分</text>
+        <text class="history-close" bindtap="closeHistoryPopup">×</text>
+      </view>
+
+      <view class="history-list" wx:if="{{historyList.length}}">
+        <block wx:for="{{historyList}}" wx:key="_id">
+          <view class="history-card" bindtap="selectHistory" data-item="{{item}}">
+            <view class="history-top">
+              <text class="history-level">{{item.level}}</text>
+              <text class="history-date">{{item.date}}</text>
+            </view>
+            <view class="history-middle">
+              <text class="history-total">{{item.total}} / {{item.totalScore}}</text>
+              <text class="history-status {{item.pass ? 'pass-text' : 'fail-text'}}">{{item.pass ? '预计合格' : '预计未达线'}}</text>
+            </view>
+          </view>
+        </block>
+      </view>
+
+      <view wx:else class="empty-history">还没有历史记录</view>
 
       <button class="close-btn" bindtap="closeHistoryPopup">关闭</button>
     </view>
   </view>
-</view>
+</scroll-view>

@@ -1,84 +1,171 @@
-<view class="container fade-in"> 
-  <!-- 模式选择 -->
-  <view class="mode-selector shadow">
-    <button bindtap="switchMode" data-mode="order" class="mode-btn {{mode === 'order' ? 'active' : ''}}" style="width: 181rpx; display: block; box-sizing: border-box; left: -5rpx; top: -3rpx; position: relative">顺序学习</button>
-    <button bindtap="switchMode" data-mode="random" class="mode-btn {{mode === 'random' ? 'active' : ''}}" style="width: 181rpx; display: block; box-sizing: border-box; left: 5rpx; top: -5rpx; position: relative">随机学习</button>
+<view class="page theme-{{currentTheme}}">
+  <view class="hero-card">
+    <view class="hero-top">
+      <view>
+        <view class="hero-badge">语法学习</view>
+        <view class="hero-title">从 {{currentCollectionLabel}} 到熟练掌握</view>
+      </view>
+      <view class="hero-actions">
+        <button class="ghost-btn" bindtap="goToFavorites">收藏</button>
+        <button class="primary-btn" bindtap="goToDeepStudy">深度学习</button>
+      </view>
+    </view>
+
+    <scroll-view class="collection-strip" scroll-x enhanced show-scrollbar="false">
+      <view class="collection-row">
+        <view
+          wx:for="{{collections}}"
+          wx:key="key"
+          class="collection-pill {{item.key === currentCollection ? 'active' : ''}}"
+          bindtap="switchCollection"
+          data-collection="{{item.key}}"
+        >
+          {{item.label}}
+        </view>
+      </view>
+    </scroll-view>
+
+    <view class="stats-grid">
+      <view class="stat-card">
+        <text class="stat-value">{{stats.learned}}</text>
+        <text class="stat-label">已学习</text>
+      </view>
+      <view class="stat-card">
+        <text class="stat-value">{{stats.mastered}}</text>
+        <text class="stat-label">已掌握</text>
+      </view>
+      <view class="stat-card">
+        <text class="stat-value">{{stats.favorites}}</text>
+        <text class="stat-label">已收藏</text>
+      </view>
+      <view class="stat-card">
+        <text class="stat-value">{{stats.total}}</text>
+        <text class="stat-label">总语法</text>
+      </view>
+    </view>
+
+    <view class="progress-panel">
+      <view class="progress-line">
+        <text class="progress-title">词书进度</text>
+        <text class="progress-text">{{stats.learned}} / {{stats.total}} · {{stats.percent}}%</text>
+      </view>
+      <view class="progress-track">
+        <view class="progress-fill" style="width: {{stats.percent}}%;"></view>
+      </view>
+    </view>
   </view>
 
-  <!-- 搜索框 -->
-  <view class="search-bar slide-in">
-    <input style="width: 675rpx; display: block; box-sizing: border-box; height: 83rpx" placeholder="🔍 搜索语法点" bindinput="onSearchInput" value="{{searchText}}" />
-    <button wx:if="{{searchText}}" bindtap="clearSearch" class="clear-btn">✕</button>
+  <view class="toolbar">
+    <view class="mode-toggle">
+      <button class="mode-btn {{mode === 'order' ? 'active' : ''}}" bindtap="switchMode" data-mode="order">
+        顺序
+      </button>
+      <button class="mode-btn {{mode === 'random' ? 'active' : ''}}" bindtap="switchMode" data-mode="random">
+        随机
+      </button>
+    </view>
+    <view class="meaning-switch">
+      <text>显示释义</text>
+      <switch checked="{{showMeaning}}" bindchange="toggleMeaning" color="#2563eb" />
+    </view>
   </view>
-  <view style="margin: 20rpx 0;" class="fade-in">
-  <switch checked="{{showMeaning}}" bindchange="toggleMeaning" />
-  <text style="margin-left: 20rpx;">{{showMeaning ? '显示语法意思' : '隐藏语法意思（暗记模式）'}}</text>
-</view>
-  <!-- 语法列表 -->
-  <view class="grammar-list fade-in-delay">
-    <block wx:for="{{grammarList}}" wx:key="grammar_id">
-      <view class="grammar-item hover-effect" bindtap="showDetail" data-id="{{item.grammar_id}}">
-        <view class="grammar-header">
-          <text class="grammar-id">#{{item.grammar_id}}</text>
+
+  <view class="search-card">
+    <input
+      class="search-input"
+      placeholder="搜索语法编号、标题、释义"
+      bindinput="onSearchInput"
+      value="{{searchText}}"
+      confirm-type="search"
+    />
+    <button wx:if="{{searchText}}" class="clear-btn" bindtap="clearSearch">清空</button>
+  </view>
+
+  <view class="grammar-list" wx:if="{{grammarList.length}}">
+    <view
+      wx:for="{{grammarList}}"
+      wx:key="grammar_id"
+      class="grammar-card"
+      bindtap="showDetail"
+      data-id="{{item.grammar_id}}"
+    >
+      <view class="grammar-card-top">
+        <view class="grammar-chip">#{{item.grammar_id}}</view>
+        <view class="grammar-meta">
           <text class="grammar-title">{{item.title}}</text>
-          <!-- 只有登录且有对应记录才显示熟练度 -->
-          <view class="proficiency" wx:if="{{isLoggedIn && userRecords[item.grammar_id]}}">
-            熟练度: {{userRecords[item.grammar_id].proficiency}}/5
-          </view>
+          <text class="grammar-sub" wx:if="{{userRecords[item.grammar_id]}}">熟练度 {{userRecords[item.grammar_id].proficiency || 0}} / 5</text>
+          <text class="grammar-sub" wx:elif="{{favoriteMap[item.grammar_id]}}">已收藏</text>
         </view>
-        <view class="grammar-meaning" wx:if="{{showMeaning}}">{{item.meaning}}</view>
       </view>
-    </block>
+      <view class="grammar-meaning" wx:if="{{showMeaning}}">{{item.meaning}}</view>
+      <view class="grammar-note" wx:if="{{item.connection}}">接续：{{item.connection}}</view>
+    </view>
   </view>
 
-  <!-- 加载更多 -->
-  <view class="load-more" wx:if="{{hasMore}}">
-    <button bindtap="loadMore" loading="{{loading}}" class="load-btn">加载更多</button>
+  <view class="empty-card" wx:elif="{{!loading}}">
+    <text class="empty-title">当前没有找到语法</text>
+    <text class="empty-desc">可以切换词书，或者试试更短的搜索词。</text>
   </view>
 
-  <!-- 语法详情弹窗 -->
-  <view class="modal" wx:if="{{showModal}}">
-    <view class="modal-content slide-up">
+  <view class="loading-card" wx:if="{{loading}}">
+    <text>{{loadingText || '加载中...'}}</text>
+  </view>
+
+  <view class="load-more" wx:if="{{hasMore && mode === 'order' && !loading}}">
+    <button class="load-btn" bindtap="loadMore">加载更多</button>
+  </view>
+
+  <view class="modal-mask" wx:if="{{showModal}}" bindtap="hideDetail">
+    <view class="modal-card" catchtap="noop">
       <view class="modal-header">
-        <text class="modal-title">📘 {{currentGrammar.grammar_id}} {{currentGrammar.title}}</text>
-        <view class="favorite-wrapper" bindtap="toggleFavorite">
-    <image class="favorite-icon scale-in" 
-           src="{{isFavorite ? '../../images/star2.png' : '../../images/star1.png'}}" 
-           mode="aspectFit" />
-  </view>
-        <button class="close-btn" bindtap="hideDetail">×</button>
-      </view>
-      <view class="modal-body">
-        <view class="grammar-section">
-          <text class="section-title">接续:</text>
-          <text class="section-content">{{currentGrammar.connection}}</text>
+        <view>
+          <text class="modal-index">#{{currentGrammar.grammar_id}}</text>
+          <text class="modal-title">{{currentGrammar.title}}</text>
         </view>
-        <view class="grammar-section">
-          <text class="section-title">意思:</text>
-          <text class="section-content">{{currentGrammar.meaning}}</text>
-        </view>
-        <view class="grammar-section">
-          <text class="section-title">例文:</text>
-          <text class="section-content">{{currentGrammar.example}}</text>
-        </view>
-        <view class="grammar-section" wx:if="{{currentGrammar.note}}">
-          <text class="section-title">注意:</text>
-          <text class="section-content">{{currentGrammar.note}}</text>
-        </view>
-        <view class="proficiency-control" wx:if="{{isLoggedIn}}">
-          <text>当前熟练度:</text>
-          <view class="stars">
-            <block wx:for="{{[1,2,3,4,5]}}" wx:key="*this">
-              <text class="star {{currentProficiency >= item ? 'active' : ''}}" 
-                    bindtap="setProficiency" data-value="{{item}}">★</text>
-            </block>
-          </view>
-          <button bindtap="updateProficiency" class="save-btn">保存熟练度</button>
-        </view>
-        <view wx:if="{{!isLoggedIn}}">
-          <text style="color: #999;">请登录后设置熟练度</text>
+        <view class="modal-tools">
+          <image
+            class="favorite-icon"
+            src="{{isFavorite ? '../../images/star2.png' : '../../images/star1.png'}}"
+            mode="aspectFit"
+            bindtap="toggleFavorite"
+          />
+          <button class="close-btn" bindtap="hideDetail">关闭</button>
         </view>
       </view>
+
+      <view class="detail-section" wx:if="{{currentGrammar.connection}}">
+        <text class="detail-label">接续</text>
+        <text class="detail-text">{{currentGrammar.connection}}</text>
+      </view>
+      <view class="detail-section">
+        <text class="detail-label">意思</text>
+        <text class="detail-text">{{currentGrammar.meaning}}</text>
+      </view>
+      <view class="detail-section" wx:if="{{currentGrammar.example}}">
+        <text class="detail-label">例句</text>
+        <text class="detail-text">{{currentGrammar.example}}</text>
+      </view>
+      <view class="detail-section" wx:if="{{currentGrammar.note}}">
+        <text class="detail-label">备注</text>
+        <text class="detail-text">{{currentGrammar.note}}</text>
+      </view>
+
+      <view class="proficiency-panel" wx:if="{{isLoggedIn}}">
+        <text class="detail-label">熟练度</text>
+        <view class="stars">
+          <text
+            wx:for="{{[1,2,3,4,5]}}"
+            wx:key="*this"
+            class="star {{currentProficiency >= item ? 'active' : ''}}"
+            bindtap="setProficiency"
+            data-value="{{item}}"
+          >
+            ★
+          </text>
+        </view>
+        <button class="save-btn" bindtap="updateProficiency">保存熟练度</button>
+      </view>
+      <view class="login-tip" wx:else>登录后可以保存熟练度和收藏。</view>
     </view>
   </view>
 </view>

@@ -19,6 +19,10 @@ function toNumber(value) {
   return 0
 }
 
+function normalizeUserId(userId) {
+  return String(userId || '').trim()
+}
+
 function resolveUserIdExpression() {
   return {
     $ifNull: [
@@ -34,7 +38,7 @@ function resolveUserIdExpression() {
 }
 
 function isValidUserId(userId) {
-  const normalized = String(userId || '').trim()
+  const normalized = normalizeUserId(userId)
   if (!normalized) return false
   if (normalized === 'guest') return false
   if (normalized.startsWith('temp_')) return false
@@ -57,9 +61,29 @@ async function aggregateScores(collectionName, scoreExpression, resultKey) {
   return (res.list || [])
     .filter(item => isValidUserId(item._id))
     .map(item => ({
-      userId: item._id,
+      userId: normalizeUserId(item._id),
       [resultKey]: toNumber(item.score)
     }))
+}
+
+async function aggregateCurrentUserScore(collectionName, scoreExpression, currentUserId) {
+  const normalized = normalizeUserId(currentUserId)
+  if (!isValidUserId(normalized)) return 0
+
+  const res = await db.collection(collectionName)
+    .aggregate()
+    .project({
+      userId: resolveUserIdExpression(),
+      score: scoreExpression
+    })
+    .match({ userId: normalized })
+    .group({
+      _id: '$userId',
+      score: $.sum('$score')
+    })
+    .end()
+
+  return toNumber(res.list[0]?.score)
 }
 
 function mergeScores(grammarRows, listeningRows, wordRows) {
@@ -111,7 +135,7 @@ function mergeScores(grammarRows, listeningRows, wordRows) {
 
 exports.main = async event => {
   const limit = Math.max(20, Number(event.limit) || 50)
-  const currentUserId = String(event.currentUserId || '').trim()
+  const currentUserId = normalizeUserId(event.currentUserId)
 
   try {
     const [grammarRows, listeningRows, wordRows] = await Promise.all([
@@ -134,11 +158,36 @@ exports.main = async event => {
 
     let currentUser = null
     let aroundMe = []
-    if (currentUserId) {
-      const index = leaderboard.findIndex(item => item.userId === currentUserId)
+    if (isValidUserId(currentUserId)) {
+      const index = leaderboard.findIndex(item => normalizeUserId(item.userId) === currentUserId)
       if (index >= 0) {
         currentUser = leaderboard[index]
         aroundMe = leaderboard.slice(Math.max(0, index - 2), Math.min(leaderboard.length, index + 3))
+      } else {
+        const [grammarScore, listeningScore, wordScore] = await Promise.all([
+          aggregateCurrentUserScore('user_study_records', { $ifNull: ['$review_count', 0] }, currentUserId),
+          aggregateCurrentUserScore('user_speaking_records', { $ifNull: ['$play_count', 0] }, currentUserId),
+          aggregateCurrentUserScore(
+            'user_word_records',
+            {
+              $ifNull: [
+                '$review_count',
+                { $ifNull: ['$proficiency', 0] }
+              ]
+            },
+            currentUserId
+          )
+        ])
+
+        const totalScore = grammarScore + listeningScore + wordScore
+        currentUser = {
+          userId: currentUserId,
+          grammarScore,
+          listeningScore,
+          wordScore,
+          totalScore,
+          rank: totalScore > 0 ? (leaderboard.filter(item => item.totalScore > totalScore).length + 1) : 0
+        }
       }
     }
 

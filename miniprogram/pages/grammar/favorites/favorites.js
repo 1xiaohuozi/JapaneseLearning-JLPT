@@ -1,197 +1,210 @@
-const db = wx.cloud.database();
-const _ = db.command;
+const db = wx.cloud.database()
+const BATCH_SIZE = 20
+
+const COLLECTIONS = [
+  { key: 'n1_grammar', label: 'N1' },
+  { key: 'n2_grammar', label: 'N2' },
+  { key: 'n3_grammar', label: 'N3' },
+  { key: 'n4n5_grammar', label: 'N4/N5' }
+]
+
+function getCollectionConfig(collectionKey) {
+  return COLLECTIONS.find((item) => item.key === collectionKey) || COLLECTIONS[1]
+}
 
 Page({
   data: {
+    collections: COLLECTIONS,
+    currentCollection: 'n2_grammar',
+    currentCollectionLabel: 'N2',
     userId: '',
-    allList: [],       // 合并后的完整数据
-    favoritesList: [],   // 当前展示数据（分页或搜索结果）
-    pageIndex: 0,
-    pageSize: 10,
-    hasMore: true,
-    loading: false,
     searchText: '',
+    showMeaning: true,
+    allList: [],
+    favoritesList: [],
+    loading: false,
     showModal: false,
-    currentGrammar: {},
-    showMeaning: true// 默认显示语法意思
+    currentGrammar: {}
   },
 
-  onLoad() {
-    const userId = wx.getStorageSync('userId');
+  onLoad(options) {
+    const userId = wx.getStorageSync('userId') || ''
     if (!userId) {
-      wx.showToast({ title: '请先登录', icon: 'none' });
-      setTimeout(() => {
-        wx.redirectTo({ url: '/pages/profile/login/login' });
-      }, 1500);
-      return;
+      wx.showModal({
+        title: '提示',
+        content: '语法收藏需要先登录，是否现在前往登录？',
+        success: (res) => {
+          if (res.confirm) {
+            wx.navigateTo({ url: '/pages/profile/login/login' })
+          } else {
+            wx.navigateBack()
+          }
+        }
+      })
+      return
     }
-    this.setData({ userId }, this.loadAllFavorites);
+
+    const collectionKey = getCollectionConfig(options.collection).key
+    const settings = wx.getStorageSync('grammar_learning_settings') || {}
+    const showMeaning = typeof settings.showMeaning === 'boolean' ? settings.showMeaning : true
+    const collection = options.collection || settings.collectionKey || collectionKey
+
+    this.setData(
+      {
+        userId,
+        currentCollection: getCollectionConfig(collection).key,
+        currentCollectionLabel: getCollectionConfig(collection).label,
+        showMeaning
+      },
+      () => this.loadFavorites()
+    )
   },
 
-  async loadAllFavorites() {
-    wx.showLoading({ title: '加载中' });
+  async loadFavorites() {
+    this.setData({ loading: true })
+    wx.showLoading({ title: '加载收藏中' })
     try {
-      const favRes = await db.collection('user_favorites')
-        .where({ user_id: this.data.userId })
-        .orderBy('create_time', 'desc')
-        .get();
-
-      const favorites = favRes.data || [];
-      const grammarIds = favorites.map(fav => fav.grammar_id);
-
-      if (grammarIds.length === 0) {
-        this.setData({ allList: [], favoritesList: [], hasMore: false });
-        wx.hideLoading();
-        return;
+      const countRes = await db.collection('user_favorites').where({ user_id: this.data.userId }).count()
+      const total = countRes.total || 0
+      if (!total) {
+        this.setData({ allList: [], favoritesList: [], loading: false })
+        return
       }
 
-      // 批量查找语法信息
-      const grammarRes = await db.collection('grammar_points')
-        .where({ grammar_id: _.in(grammarIds) })
-        .get();
+      const tasks = []
+      const batchTimes = Math.ceil(total / BATCH_SIZE)
+      for (let i = 0; i < batchTimes; i += 1) {
+        tasks.push(
+          db
+            .collection('user_favorites')
+            .where({ user_id: this.data.userId })
+            .skip(i * BATCH_SIZE)
+            .limit(BATCH_SIZE)
+            .get()
+        )
+      }
+      const favResults = await Promise.all(tasks)
+      const favorites = favResults
+        .flatMap((res) => res.data)
+        .filter((item) => (item.collection ? item.collection === this.data.currentCollection : this.data.currentCollection === 'n2_grammar'))
+        .sort((a, b) => new Date(b.create_time || 0) - new Date(a.create_time || 0))
 
-      const grammarMap = {};
-      grammarRes.data.forEach(g => {
-        grammarMap[g.grammar_id] = g;
-      });
+      const grammarIds = favorites.map((item) => Number(item.grammar_id))
+      if (!grammarIds.length) {
+        this.setData({ allList: [], favoritesList: [], loading: false })
+        return
+      }
 
-      // 合并信息
-      const merged = favorites.map(fav => {
-        const grammar = grammarMap[fav.grammar_id];
-        return grammar ? {
-          ...grammar,
-          create_time: this.formatTime(fav.create_time),
-          grammar_id: fav.grammar_id
-        } : null;
-      }).filter(Boolean);
+      const grammarTasks = []
+      for (let i = 0; i < grammarIds.length; i += BATCH_SIZE) {
+        const ids = grammarIds.slice(i, i + BATCH_SIZE)
+        grammarTasks.push(
+          db.collection(this.data.currentCollection).where({ grammar_id: db.command.in(ids) }).get()
+        )
+      }
+      const grammarResults = await Promise.all(grammarTasks)
+      const grammarMap = {}
+      grammarResults.flatMap((res) => res.data).forEach((item) => {
+        grammarMap[Number(item.grammar_id)] = item
+      })
+
+      const allList = favorites
+        .map((favorite) => grammarMap[Number(favorite.grammar_id)])
+        .filter(Boolean)
 
       this.setData({
-        allList: merged,
-        pageIndex: 0,
-        favoritesList: [],
-        hasMore: true
-      }, this.loadPagedData);
-      console.log('当前用户ID:', this.data.userId);
-      console.log('user_favorites 查询结果:', favorites);
-      console.log('grammarIds 提取结果:', grammarIds);
-      console.log('grammar_points 查询结果:', grammarRes.data);
-      
-    } catch (err) {
-      console.error('加载收藏失败：', err);
-      wx.showToast({ title: '加载失败', icon: 'none' });
+        allList,
+        favoritesList: allList,
+        loading: false
+      })
+    } catch (error) {
+      console.error('loadFavorites failed', error)
+      this.setData({ loading: false })
+      wx.showToast({ title: '加载失败', icon: 'none' })
     } finally {
-      wx.hideLoading();
+      wx.hideLoading()
     }
   },
 
-  loadPagedData() {
-    const { allList, pageIndex, pageSize, favoritesList } = this.data;
-    const nextItems = allList.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
-
-    this.setData({
-      favoritesList: favoritesList.concat(nextItems),
-      hasMore: allList.length > (pageIndex + 1) * pageSize,
-      loading: false
-    });
-  },
-
-  loadMore() {
-    if (!this.data.hasMore || this.data.loading) return;
-    this.setData({ loading: true, pageIndex: this.data.pageIndex + 1 }, this.loadPagedData);
+  switchCollection(e) {
+    const config = getCollectionConfig(e.currentTarget.dataset.collection)
+    if (config.key === this.data.currentCollection) return
+    this.setData(
+      {
+        currentCollection: config.key,
+        currentCollectionLabel: config.label,
+        searchText: '',
+        allList: [],
+        favoritesList: []
+      },
+      () => this.loadFavorites()
+    )
   },
 
   onSearchInput(e) {
-    const searchText = e.detail.value.trim();
-    this.setData({ searchText });
-
-    if (!searchText) {
-      this.resetPagination();
-      return;
-    }
-
-    const filtered = this.data.allList.filter(item =>
-      item.title?.includes(searchText) ||
-      item.meaning?.includes(searchText) ||
-      item.grammar_id?.toString().includes(searchText)
-    );
-
-    this.setData({
-      favoritesList: filtered,
-      hasMore: false,
-      pageIndex: 0
-    });
+    const searchText = (e.detail.value || '').trim()
+    const favoritesList = searchText
+      ? this.data.allList.filter(
+          (item) =>
+            item.title?.includes(searchText) ||
+            item.meaning?.includes(searchText) ||
+            String(item.grammar_id).includes(searchText)
+        )
+      : this.data.allList
+    this.setData({ searchText, favoritesList })
   },
 
   clearSearch() {
-    this.setData({ searchText: '' }, this.resetPagination);
+    this.setData({ searchText: '', favoritesList: this.data.allList })
   },
 
-  resetPagination() {
-    this.setData({
-      favoritesList: [],
-      pageIndex: 0,
-      hasMore: true
-    }, this.loadPagedData);
+  toggleMeaning(e) {
+    this.setData({ showMeaning: !!e.detail.value })
   },
 
   showDetail(e) {
-    const id = e.currentTarget.dataset.id;
-    const grammar = this.data.allList.find(item => item.grammar_id == id);
-    if (grammar) {
-      this.setData({ currentGrammar: grammar, showModal: true });
-    }
+    const grammarId = Number(e.currentTarget.dataset.id)
+    const currentGrammar = this.data.allList.find((item) => Number(item.grammar_id) === grammarId)
+    if (!currentGrammar) return
+    this.setData({ currentGrammar, showModal: true })
   },
 
   hideDetail() {
-    this.setData({ showModal: false });
+    this.setData({ showModal: false })
   },
 
-  formatTime(date) {
-    const d = new Date(date);
-    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-  },
   async removeFavorite() {
-    const { userId, currentGrammar } = this.data;
-    if (!userId || !currentGrammar.grammar_id) return;
-  
-    wx.showModal({
-      title: '确认操作',
-      content: `确定要移除「${currentGrammar.title}」的收藏吗？`,
-      success: async (res) => {
-        if (res.confirm) {
-          try {
-            // 从 user_favorites 中删除对应收藏记录
-            await db.collection('user_favorites')
-              .where({
-                user_id: userId,
-                grammar_id: currentGrammar.grammar_id
-              })
-              .remove();
-  
-            wx.showToast({ title: '已取消收藏', icon: 'success' });
-  
-            // 从本地数据中移除该项
-            const updatedAllList = this.data.allList.filter(item => item.grammar_id !== currentGrammar.grammar_id);
-            const updatedFavoritesList = this.data.favoritesList.filter(item => item.grammar_id !== currentGrammar.grammar_id);
-  
-            this.setData({
-              allList: updatedAllList,
-              favoritesList: updatedFavoritesList,
-              showModal: false
-            });
-          } catch (err) {
-            console.error('移除收藏失败', err);
-            wx.showToast({ title: '操作失败', icon: 'none' });
-          }
-        }
+    const currentGrammar = this.data.currentGrammar
+    if (!currentGrammar.grammar_id) return
+    wx.showLoading({ title: '处理中...' })
+    try {
+      const res = await db
+        .collection('user_favorites')
+        .where({
+          user_id: this.data.userId,
+          grammar_id: Number(currentGrammar.grammar_id)
+        })
+        .get()
+      const target = res.data.find((item) =>
+        item.collection ? item.collection === this.data.currentCollection : this.data.currentCollection === 'n2_grammar'
+      )
+      if (target?._id) {
+        await db.collection('user_favorites').doc(target._id).remove()
       }
-    });
+      const allList = this.data.allList.filter((item) => Number(item.grammar_id) !== Number(currentGrammar.grammar_id))
+      const favoritesList = this.data.favoritesList.filter(
+        (item) => Number(item.grammar_id) !== Number(currentGrammar.grammar_id)
+      )
+      this.setData({ allList, favoritesList, showModal: false })
+      wx.showToast({ title: '已取消收藏', icon: 'success' })
+    } catch (error) {
+      console.error('removeFavorite failed', error)
+      wx.showToast({ title: '操作失败', icon: 'none' })
+    } finally {
+      wx.hideLoading()
+    }
   },
-  toggleMeaning(e) {
-    this.setData({
-      showMeaning: e.detail.value
-    });
-  }
+
+  noop() {}
   
-  
-});
+})

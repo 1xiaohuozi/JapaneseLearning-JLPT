@@ -5,6 +5,15 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 const _ = db.command
 const MAX_BATCH = 100
+const DEFAULT_PROFILE = {
+  collection: 'n2_words',
+  newLimit: 20,
+  reviewLimit: 40
+}
+
+function getProfileDocId(userId) {
+  return `profile_${userId}`
+}
 
 function chunk(list, size = MAX_BATCH) {
   const result = []
@@ -121,13 +130,50 @@ function getDefaultProgress() {
       newDone: 0,
       reviewDone: 0
     },
+    planStats: {},
     updatedAt: 0
   }
 }
 
-async function buildSession({ userId, collection, newLimit = 20, reviewLimit = 40 }) {
+function getTodayKey() {
+  const date = new Date()
+  const y = date.getFullYear()
+  const m = `${date.getMonth() + 1}`.padStart(2, '0')
+  const d = `${date.getDate()}`.padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function resolveDateKey(inputDateKey) {
+  if (typeof inputDateKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(inputDateKey)) {
+    return inputDateKey
+  }
+  return getTodayKey()
+}
+
+async function readProgress(userId, collection) {
+  if (!userId || !collection) return null
+  const docId = `${userId}_${collection}`
+
+  try {
+    const doc = await db.collection('user_word_progress').doc(docId).get()
+    return {
+      dateKey: doc.data.date_key || '',
+      queueIds: doc.data.queue_ids || [],
+      currentWordId: doc.data.current_word_id || '',
+      currentIndex: doc.data.current_index || 0,
+      sessionStats: doc.data.stats || getDefaultProgress().sessionStats,
+      planStats: doc.data.plan_stats || {},
+      updatedAt: doc.data.client_updated_at || 0
+    }
+  } catch (error) {
+    return null
+  }
+}
+
+async function buildSession({ userId, collection, newLimit = 20, reviewLimit = 40, dateKey }) {
   const totalRes = await db.collection(collection).count()
   const totalWords = totalRes.total || 0
+  const todayKey = resolveDateKey(dateKey)
 
   const [records, favorites] = userId
     ? await Promise.all([
@@ -183,19 +229,50 @@ async function buildSession({ userId, collection, newLimit = 20, reviewLimit = 4
   }
 
   const masteredCount = records.filter(record => (record.proficiency || 0) >= 5).length
+  const freshStats = {
+    totalWords,
+    learnedWords: learnedIds.size,
+    dueCount: dueRecordIds.length,
+    availableNewCount: Math.max(totalWords - learnedIds.size, 0),
+    masteredCount,
+    sessionSize: dueWords.length + newWords.length,
+    reviewPlanned: dueWords.length,
+    newPlanned: newWords.length
+  }
+
+  if (userId) {
+    const savedProgress = await readProgress(userId, collection)
+    if (
+      savedProgress &&
+      savedProgress.dateKey === todayKey &&
+      Array.isArray(savedProgress.queueIds)
+    ) {
+      const savedWordsRaw = await getWordsByIds(collection, savedProgress.queueIds)
+      const savedWordMap = new Map(savedWordsRaw.map(word => [word._id, word]))
+      const savedWords = savedProgress.queueIds
+        .map(id => savedWordMap.get(id))
+        .filter(Boolean)
+        .map(word => normalizeWord(
+          word,
+          recordMap,
+          favoriteSet,
+          learnedIds.has(word._id) ? 'review' : 'new'
+        ))
+
+      return {
+        sessionWords: savedWords,
+        stats: {
+          ...freshStats,
+          ...(savedProgress.planStats || {})
+        },
+        progress: savedProgress
+      }
+    }
+  }
 
   return {
     sessionWords: buildSessionQueue(dueWords, newWords),
-    stats: {
-      totalWords,
-      learnedWords: learnedIds.size,
-      dueCount: dueRecordIds.length,
-      availableNewCount: Math.max(totalWords - learnedIds.size, 0),
-      masteredCount,
-      sessionSize: dueWords.length + newWords.length,
-      reviewPlanned: dueWords.length,
-      newPlanned: newWords.length
-    }
+    stats: freshStats
   }
 }
 
@@ -315,29 +392,13 @@ async function getFavorites({ userId, collection, skip = 0, limit = 20 }) {
 }
 
 async function getProgress({ userId, collection }) {
-  if (!userId) return { progress: null }
-  const docId = `${userId}_${collection}`
-
-  try {
-    const doc = await db.collection('user_word_progress').doc(docId).get()
-    return {
-      progress: {
-        dateKey: doc.data.date_key || '',
-        queueIds: doc.data.queue_ids || [],
-        currentWordId: doc.data.current_word_id || '',
-        currentIndex: doc.data.current_index || 0,
-        sessionStats: doc.data.stats || getDefaultProgress().sessionStats,
-        updatedAt: doc.data.client_updated_at || 0
-      }
-    }
-  } catch (error) {
-    return { progress: null }
-  }
+  return { progress: await readProgress(userId, collection) }
 }
 
 async function saveProgress({ userId, collection, payload }) {
   if (!userId || !collection || !payload) return { ok: false }
   const docId = `${userId}_${collection}`
+  const stats = payload.sessionStats || payload.stats || {}
 
   await db.collection('user_word_progress').doc(docId).set({
     data: {
@@ -348,13 +409,59 @@ async function saveProgress({ userId, collection, payload }) {
       current_index: payload.currentIndex || 0,
       queue_ids: payload.queueIds || [],
       completed_count: payload.completedCount || 0,
-      stats: payload.stats || {},
+      stats,
+      plan_stats: payload.planStats || {},
       client_updated_at: payload.updatedAt || Date.now(),
       update_time: db.serverDate()
     }
   })
 
   return { ok: true }
+}
+
+async function getUserProfile({ userId }) {
+  if (!userId) {
+    return { profile: { ...DEFAULT_PROFILE }, hasProfile: false }
+  }
+
+  try {
+    const doc = await db.collection('user_word_progress').doc(getProfileDocId(userId)).get()
+    return {
+      profile: {
+        ...DEFAULT_PROFILE,
+        collection: doc.data.collection || DEFAULT_PROFILE.collection,
+        newLimit: Number(doc.data.new_limit) || DEFAULT_PROFILE.newLimit,
+        reviewLimit: Number(doc.data.review_limit) || DEFAULT_PROFILE.reviewLimit
+      },
+      hasProfile: true
+    }
+  } catch (error) {
+    return { profile: { ...DEFAULT_PROFILE }, hasProfile: false }
+  }
+}
+
+async function saveUserProfile({ userId, payload }) {
+  if (!userId || !payload) return { ok: false }
+
+  await db.collection('user_word_progress').doc(getProfileDocId(userId)).set({
+    data: {
+      doc_type: 'profile',
+      user_id: userId,
+      collection: payload.collection || DEFAULT_PROFILE.collection,
+      new_limit: Number(payload.newLimit) || DEFAULT_PROFILE.newLimit,
+      review_limit: Number(payload.reviewLimit) || DEFAULT_PROFILE.reviewLimit,
+      update_time: db.serverDate()
+    }
+  })
+
+  return {
+    ok: true,
+    profile: {
+      collection: payload.collection || DEFAULT_PROFILE.collection,
+      newLimit: Number(payload.newLimit) || DEFAULT_PROFILE.newLimit,
+      reviewLimit: Number(payload.reviewLimit) || DEFAULT_PROFILE.reviewLimit
+    }
+  }
 }
 
 async function clearProgress({ userId, collection }) {
@@ -389,6 +496,10 @@ exports.main = async (event) => {
         return await saveProgress(event)
       case 'clearProgress':
         return await clearProgress(event)
+      case 'getUserProfile':
+        return await getUserProfile(event)
+      case 'saveUserProfile':
+        return await saveUserProfile(event)
       default:
         return { ok: false, error: `Unknown action: ${action}` }
     }

@@ -1,20 +1,29 @@
+function normalizeUserId(userId = '') {
+  return String(userId || '').trim()
+}
+
 function maskUserId(userId = '') {
-  if (!userId) return '未登录用户'
-  if (userId.length <= 8) return `${userId}***`
-  return `${userId.slice(0, 4)}...${userId.slice(-4)}`
+  const normalized = normalizeUserId(userId)
+  if (!normalized) return '未登录用户'
+  if (normalized.length <= 8) return `${normalized}***`
+  return `${normalized.slice(0, 4)}...${normalized.slice(-4)}`
 }
 
 function decorateUser(entry, currentUserId) {
   if (!entry) return null
+  const normalizedCurrent = normalizeUserId(currentUserId)
+  const normalizedEntry = normalizeUserId(entry.userId)
+
   return {
     ...entry,
+    userId: normalizedEntry,
     rank: Number(entry.rank) || 0,
     grammarScore: Number(entry.grammarScore) || 0,
     listeningScore: Number(entry.listeningScore) || 0,
     wordScore: Number(entry.wordScore) || 0,
     totalScore: Number(entry.totalScore) || 0,
-    isSelf: entry.userId === currentUserId,
-    displayName: entry.userId === currentUserId ? '我自己' : maskUserId(entry.userId),
+    isSelf: normalizedEntry === normalizedCurrent,
+    displayName: normalizedEntry === normalizedCurrent ? '我自己' : maskUserId(normalizedEntry),
     badgeText: entry.rank === 1 ? '冠军' : entry.rank === 2 ? '亚军' : entry.rank === 3 ? '季军' : ''
   }
 }
@@ -38,7 +47,7 @@ Page({
   async onShow() {
     const previousUserId = this.data.currentUserId
     await this.resolveCurrentUser()
-    if (previousUserId !== this.data.currentUserId) {
+    if (normalizeUserId(previousUserId) !== normalizeUserId(this.data.currentUserId)) {
       await this.loadLeaderboard()
     }
   },
@@ -61,11 +70,12 @@ Page({
       }
     }
 
+    userId = normalizeUserId(userId)
     if (userId) {
       wx.setStorageSync('userId', userId)
     }
 
-    this.setData({ currentUserId: userId || '' })
+    this.setData({ currentUserId: userId })
   },
 
   async loadLeaderboard() {
@@ -88,7 +98,7 @@ Page({
       const myRank = decorateUser(res.result.currentUser, this.data.currentUserId)
       const aroundMe = (res.result.aroundMe || [])
         .map(item => decorateUser(item, this.data.currentUserId))
-        .filter(item => !leaderboard.some(top => top.userId === item.userId))
+        .filter(item => !leaderboard.some(top => normalizeUserId(top.userId) === normalizeUserId(item.userId)))
 
       this.setData({
         loading: false,

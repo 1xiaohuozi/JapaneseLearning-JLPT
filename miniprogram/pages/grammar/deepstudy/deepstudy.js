@@ -1,407 +1,399 @@
-const db = wx.cloud.database();
-const _ = db.command;
+const db = wx.cloud.database()
+const _ = db.command
+const BATCH_SIZE = 20
+
+const COLLECTIONS = [
+  { key: 'n1_grammar', label: 'N1', theme: 'summit' },
+  { key: 'n2_grammar', label: 'N2', theme: 'ocean' },
+  { key: 'n3_grammar', label: 'N3', theme: 'forest' },
+  { key: 'n4n5_grammar', label: 'N4/N5', theme: 'sunrise' }
+]
+
+function getCollectionConfig(collectionKey) {
+  return COLLECTIONS.find((item) => item.key === collectionKey) || COLLECTIONS[1]
+}
 
 Page({
   data: {
+    collections: COLLECTIONS,
+    currentCollection: 'n2_grammar',
+    currentCollectionLabel: 'N2',
+    currentTheme: 'ocean',
     currentGrammar: null,
-    currentProficiency: 0, // ⭐ 当前语法的熟练度星级
+    currentProficiency: 0,
     isFavorite: false,
     loading: true,
     showDetail: false,
     allCompleted: false,
-    currentTab: 'overview', // 默认选中
+    reviewRemaining: 0,
+    newRemaining: 0
   },
-  
-  
 
-  userId: "",
+  userId: '',
   grammarList: [],
   studyRecords: {},
+  favoriteMap: {},
   currentIndex: 0,
 
-  onLoad() {
-    this.userId = wx.getStorageSync('userId') || '';
-  },
-
-  onShow() {
-    this.userId = wx.getStorageSync('userId') || '';
-    if (!this.userId) {
+  onLoad(options) {
+    const userId = wx.getStorageSync('userId') || ''
+    if (!userId) {
       wx.showModal({
         title: '提示',
-        content: '您尚未登录，是否前往登录页面？',
-        success: res => {
+        content: '深度学习需要先登录，是否现在前往登录？',
+        success: (res) => {
           if (res.confirm) {
-            wx.navigateTo({ url: '/pages/profile/login/login' });
+            wx.navigateTo({ url: '/pages/profile/login/login' })
           } else {
-            wx.navigateBack();
+            wx.navigateBack()
           }
         }
-      });
-      return;
+      })
+      return
     }
-  
-    if (Array.isArray(this.grammarList) && this.grammarList.length > 0 && this.currentIndex < this.grammarList.length) {
-      const grammarId = this.grammarList[this.currentIndex].grammar_id;
-      const record = this.studyRecords[grammarId] || {};
-      
-      this.setData({
-        currentGrammar: this.grammarList[this.currentIndex],
-        currentProficiency: record.proficiency || 0, // 确保有默认值0
-        allCompleted: false,
-        loading: false,
-        showDetail: false
-      });
-      
-      this.checkFavoriteStatus(grammarId);
-    } else if (this.data.allCompleted) {
-      this.setData({ loading: false });
-    } else {
-      this.loadGrammar();
-    }
+
+    const settings = wx.getStorageSync('grammar_learning_settings') || {}
+    const collection = options.collection || settings.collectionKey || 'n2_grammar'
+    const config = getCollectionConfig(collection)
+    this.userId = userId
+    this.setData({
+      currentCollection: config.key,
+      currentCollectionLabel: config.label,
+      currentTheme: config.theme
+    })
+    this.loadGrammar()
   },
 
-  // 获取所有语法数据（分页获取）
-  async getAllGrammarPoints() {
-    const MAX_LIMIT = 20;
-    const countRes = await db.collection('grammar_points').count();
-    const total = countRes.total;
-    const batchTimes = Math.ceil(total / MAX_LIMIT);
-    const tasks = [];
+  filterByCollection(records, collectionKey = this.data.currentCollection) {
+    return (records || []).filter((item) => {
+      if (item.collection) return item.collection === collectionKey
+      return collectionKey === 'n2_grammar'
+    })
+  },
 
-    for (let i = 0; i < batchTimes; i++) {
-      const promise = db.collection('grammar_points')
-        .skip(i * MAX_LIMIT)
-        .limit(MAX_LIMIT)
-        .get();
-      tasks.push(promise);
+  async getAllGrammarPoints() {
+    const countRes = await db.collection(this.data.currentCollection).count()
+    const total = countRes.total || 0
+    if (!total) return []
+    const tasks = []
+    const batchTimes = Math.ceil(total / BATCH_SIZE)
+    for (let i = 0; i < batchTimes; i += 1) {
+      tasks.push(
+        db
+          .collection(this.data.currentCollection)
+          .orderBy('grammar_id', 'asc')
+          .skip(i * BATCH_SIZE)
+          .limit(BATCH_SIZE)
+          .get()
+      )
+    }
+    const results = await Promise.all(tasks)
+    return results.flatMap((res) => res.data)
+  },
+
+  async getUserRecords() {
+    const countRes = await db.collection('user_study_records').where({ user_id: this.userId }).count()
+    const total = countRes.total || 0
+    if (!total) return []
+    const tasks = []
+    const batchTimes = Math.ceil(total / BATCH_SIZE)
+    for (let i = 0; i < batchTimes; i += 1) {
+      tasks.push(
+        db
+          .collection('user_study_records')
+          .where({ user_id: this.userId })
+          .skip(i * BATCH_SIZE)
+          .limit(BATCH_SIZE)
+          .get()
+      )
+    }
+    const results = await Promise.all(tasks)
+    return this.filterByCollection(results.flatMap((res) => res.data))
+  },
+
+  async getFavorites() {
+    const countRes = await db.collection('user_favorites').where({ user_id: this.userId }).count()
+    const total = countRes.total || 0
+    if (!total) return []
+    const tasks = []
+    const batchTimes = Math.ceil(total / BATCH_SIZE)
+    for (let i = 0; i < batchTimes; i += 1) {
+      tasks.push(
+        db
+          .collection('user_favorites')
+          .where({ user_id: this.userId })
+          .skip(i * BATCH_SIZE)
+          .limit(BATCH_SIZE)
+          .get()
+      )
+    }
+    const results = await Promise.all(tasks)
+    return this.filterByCollection(results.flatMap((res) => res.data))
+  },
+
+  buildStudyQueue(allGrammar, records) {
+    const now = Date.now()
+    const reviewQueue = []
+    const newQueue = []
+
+    allGrammar.forEach((grammar) => {
+      const record = records[Number(grammar.grammar_id)]
+      if (!record) {
+        newQueue.push(grammar)
+        return
+      }
+      const last = record.last_review ? new Date(record.last_review).getTime() : 0
+      const days = last ? Math.floor((now - last) / (1000 * 60 * 60 * 24)) : 99
+      const proficiency = Number(record.proficiency) || 0
+      const shouldReview = days >= Math.max(1, 5 - proficiency)
+      if (shouldReview || proficiency < 4) reviewQueue.push(grammar)
+    })
+
+    reviewQueue.sort((a, b) => {
+      const aRecord = records[Number(a.grammar_id)]
+      const bRecord = records[Number(b.grammar_id)]
+      const aTime = new Date(aRecord?.last_review || 0).getTime()
+      const bTime = new Date(bRecord?.last_review || 0).getTime()
+      return aTime - bTime
+    })
+
+    const merged = []
+    const max = Math.max(reviewQueue.length, newQueue.length)
+    for (let i = 0; i < max; i += 1) {
+      if (i < reviewQueue.length) merged.push(reviewQueue[i])
+      if (i < newQueue.length) merged.push(newQueue[i])
     }
 
-    const results = await Promise.all(tasks);
-    return results.flatMap(res => res.data);
+    return { merged, reviewQueue, newQueue }
   },
 
   async loadGrammar() {
-    this.setData({ loading: true, isFavorite: false,allCompleted: false, currentGrammar: null, showDetail: false });
-    wx.showLoading({ title: '加载语法中' });
-
+    this.setData({ loading: true, allCompleted: false, showDetail: false, currentGrammar: null })
+    wx.showLoading({ title: '加载语法中' })
     try {
-      // 1. 获取所有语法（修改为分页）
-      const allGrammar = await this.getAllGrammarPoints();
-      if (allGrammar.length === 0) {
-        wx.showToast({ title: '语法库为空', icon: 'none' });
-        this.setData({ loading: false });
-        wx.hideLoading();
-        return;
+      const [allGrammar, records, favorites] = await Promise.all([
+        this.getAllGrammarPoints(),
+        this.getUserRecords(),
+        this.getFavorites()
+      ])
+      this.studyRecords = {}
+      records.forEach((item) => {
+        this.studyRecords[Number(item.grammar_id)] = item
+      })
+      this.favoriteMap = {}
+      favorites.forEach((item) => {
+        this.favoriteMap[Number(item.grammar_id)] = item
+      })
+
+      const { merged, reviewQueue, newQueue } = this.buildStudyQueue(allGrammar, this.studyRecords)
+      this.grammarList = merged
+      this.currentIndex = 0
+
+      if (!merged.length) {
+        this.setData({
+          loading: false,
+          allCompleted: true,
+          reviewRemaining: 0,
+          newRemaining: 0
+        })
+        return
       }
 
-      // 2. 获取用户学习记录
-      const userRecordsRes = await db.collection('user_study_records')
-        .where({ user_id: this.userId })
-        .get();
-      const records = userRecordsRes.data;
-      this.studyRecords = {};
-      for (const rec of records) {
-        this.studyRecords[rec.grammar_id] = rec;
-      }
-
-      const MAX_INTERVAL_DAYS = 30;
-      const now = new Date();
-
-      let reviewCandidates = [];
-      let newCandidates = [];
-
-      for (const g of allGrammar) {
-        const rec = this.studyRecords[g.grammar_id];
-        if (rec) {
-          let proficiency = rec.proficiency || 0;
-          let lastReview = rec.last_review ? new Date(rec.last_review) : null;
-          let intervalDays = lastReview ? Math.floor((now - lastReview) / (1000 * 60 * 60 * 24)) : MAX_INTERVAL_DAYS;
-          let weight = (MAX_INTERVAL_DAYS - intervalDays) * (5 - proficiency);
-          weight = Math.max(0, weight);
-          if (weight > 0) {
-            reviewCandidates.push({ grammar: g, weight });
-          }
-        } else {
-          newCandidates.push({ grammar: g, weight: 10 });
-        }
-      }
-
-      reviewCandidates.sort((a, b) => b.weight - a.weight);
-
-      for (let i = newCandidates.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [newCandidates[i], newCandidates[j]] = [newCandidates[j], newCandidates[i]];
-      }
-
-      const mergedList = [];
-      const maxLen = Math.max(reviewCandidates.length, newCandidates.length);
-      for (let i = 0; i < maxLen; i++) {
-        if (i < reviewCandidates.length) mergedList.push(reviewCandidates[i].grammar);
-        if (i < newCandidates.length) mergedList.push(newCandidates[i].grammar);
-      }
-
-      if (mergedList.length === 0) {
-        this.setData({ allCompleted: true, loading: false, currentGrammar: null });
-        this.grammarList = [];
-        wx.hideLoading();
-        return;
-      }
-
-      this.grammarList = mergedList;
-      this.currentIndex = 0;
- // 获取第一条语法的熟练度
- const firstGrammar = this.grammarList[0];
- const grammarId = firstGrammar.grammar_id;
- const record = this.studyRecords[grammarId] || {};
+      const first = merged[0]
+      const firstRecord = this.studyRecords[Number(first.grammar_id)] || {}
       this.setData({
-        currentGrammar: this.grammarList[this.currentIndex],
-        currentProficiency: record.proficiency || 0, // 确保初始熟练度
         loading: false,
-        showDetail: false,
-        allCompleted: false
-      });
-      await this.checkFavoriteStatus(this.grammarList[this.currentIndex].grammar_id);
-      wx.hideLoading();
-
+        currentGrammar: first,
+        currentProficiency: firstRecord.proficiency || 0,
+        isFavorite: !!this.favoriteMap[Number(first.grammar_id)],
+        reviewRemaining: reviewQueue.length,
+        newRemaining: newQueue.length
+      })
     } catch (error) {
-      console.error('加载语法失败', error);
-      wx.showToast({ title: '加载失败，请重试', icon: 'error' });
-      this.setData({ loading: false });
-      wx.hideLoading();
+      console.error('loadGrammar failed', error)
+      this.setData({ loading: false })
+      wx.showToast({ title: '加载失败', icon: 'none' })
+    } finally {
+      wx.hideLoading()
     }
   },
 
+  switchCollection(e) {
+    const config = getCollectionConfig(e.currentTarget.dataset.collection)
+    if (config.key === this.data.currentCollection) return
+    this.setData({
+      currentCollection: config.key,
+      currentCollectionLabel: config.label,
+      currentTheme: config.theme
+    })
+    const settings = wx.getStorageSync('grammar_learning_settings') || {}
+    wx.setStorageSync('grammar_learning_settings', {
+      ...settings,
+      collectionKey: config.key
+    })
+    this.loadGrammar()
+  },
+
   async handleAnswer(e) {
-    if (!this.userId) {
-      wx.showToast({ title: '请先登录', icon: 'none' });
-      return;
-    }
-    if (!this.data.currentGrammar) return;
-  
-    const known = e.currentTarget.dataset.known === 'true';
-    const grammar_id = this.data.currentGrammar.grammar_id;
-  
-    wx.showLoading({ title: '更新进度中' });
-  
+    if (!this.data.currentGrammar) return
+    const known = e.currentTarget.dataset.known === 'true'
+    const grammarId = Number(this.data.currentGrammar.grammar_id)
+
+    wx.showLoading({ title: '更新进度中' })
     try {
-      const recordRes = await db.collection('user_study_records')
-        .where({ user_id: this.userId, grammar_id })
-        .get();
-  
-      let newProficiency;
-      if (recordRes.data.length === 0) {
-        // 新记录
-        newProficiency = known ? 1 : 0;
-        await db.collection('user_study_records').add({
+      const record = this.studyRecords[grammarId]
+      let proficiency = 0
+      let recordId = record?._id
+      if (recordId) {
+        proficiency = known ? Math.min(5, (record.proficiency || 0) + 1) : Math.max(0, (record.proficiency || 0) - 1)
+        await db.collection('user_study_records').doc(recordId).update({
+          data: {
+            proficiency,
+            review_count: _.inc(1),
+            last_review: db.serverDate(),
+            collection: this.data.currentCollection
+          }
+        })
+      } else {
+        proficiency = known ? 1 : 0
+        const res = await db.collection('user_study_records').add({
           data: {
             user_id: this.userId,
-            grammar_id,
-            proficiency: newProficiency,
+            grammar_id: grammarId,
+            collection: this.data.currentCollection,
+            proficiency,
             review_count: 1,
             study_time: db.serverDate(),
             last_review: db.serverDate()
           }
-        });
-      } else {
-        // 更新记录
-        const record = recordRes.data[0];
-        newProficiency = known ? 
-          Math.min(5, (record.proficiency || 0) + 1) : 
-          Math.max(0, (record.proficiency || 0) - 1);
-  
-        await db.collection('user_study_records').doc(record._id).update({
-          data: {
-            proficiency: newProficiency,
-            review_count: _.inc(1),
-            last_review: db.serverDate()
-          }
-        });
+        })
+        recordId = res._id
       }
-  
-      // 更新本地记录
-      this.studyRecords[grammar_id] = {
-        ...(this.studyRecords[grammar_id] || {}),
-        proficiency: newProficiency,
-        last_review: new Date()
-      };
-  
-      // 立即更新UI
+
+      this.studyRecords[grammarId] = {
+        ...(this.studyRecords[grammarId] || {}),
+        _id: recordId,
+        grammar_id: grammarId,
+        collection: this.data.currentCollection,
+        proficiency
+      }
       this.setData({
-        currentProficiency: newProficiency,
+        currentProficiency: proficiency,
         showDetail: true
-      });
-  
+      })
     } catch (error) {
-      console.error('更新学习记录失败', error);
-      wx.showToast({ title: '更新失败，请重试', icon: 'error' });
+      console.error('handleAnswer failed', error)
+      wx.showToast({ title: '更新失败', icon: 'none' })
     } finally {
-      wx.hideLoading();
+      wx.hideLoading()
     }
   },
 
   async nextGrammar() {
-    this.currentIndex++;
-  
+    this.currentIndex += 1
     if (this.currentIndex >= this.grammarList.length) {
-      this.setData({ currentGrammar: null, allCompleted: true, showDetail: false });
-      wx.showToast({ title: '已完成全部语法', icon: 'success' });
-      return;
-    }
-  
-    this.setData({ loading: true });
-    // wx.showLoading({ title: '加载下一条' });
-    try {
-      const nextGrammar = this.grammarList[this.currentIndex];
-      const grammarId = nextGrammar.grammar_id;
-  
-      let record = this.studyRecords[grammarId];
-  
-      // 若本地记录没有该语法的熟练度，尝试从数据库查询一次
-      if (!record) {
-        const res = await db.collection('user_study_records')
-          .where({ user_id: this.userId, grammar_id: grammarId })
-          .get();
-        if (res.data.length > 0) {
-          record = res.data[0];
-          this.studyRecords[grammarId] = record; // 更新本地缓存
-        } else {
-          record = { proficiency: 0 };
-        }
-      }
-  
       this.setData({
-        currentGrammar: nextGrammar,
-        currentProficiency: record.proficiency || 0,
+        currentGrammar: null,
+        allCompleted: true,
         showDetail: false,
-        loading: false
-      });
-  
-      await this.checkFavoriteStatus(grammarId);
-    } catch (error) {
-      console.error('加载下一条语法失败', error);
-      wx.showToast({ title: '加载失败', icon: 'error' });
-      this.setData({ loading: false });
-    }finally {
-    wx.hideLoading(); // 不论成功或失败都关闭 loading 弹窗
-  }
-  },  
-  async resetStudy() {
-    if (!this.userId) {
-      wx.showToast({ title: '请先登录', icon: 'none' });
-      return;
+        reviewRemaining: 0,
+        newRemaining: 0
+      })
+      return
     }
+    const currentGrammar = this.grammarList[this.currentIndex]
+    const record = this.studyRecords[Number(currentGrammar.grammar_id)] || {}
+    const remaining = this.grammarList.slice(this.currentIndex)
+    let reviewRemaining = 0
+    let newRemaining = 0
+    remaining.forEach((item) => {
+      if (this.studyRecords[Number(item.grammar_id)]) reviewRemaining += 1
+      else newRemaining += 1
+    })
 
-    wx.showLoading({ title: '重置复习中' });
-
-    try {
-      const userRecordsRes = await db.collection('user_study_records')
-        .where({ user_id: this.userId })
-        .get();
-
-      const recordIds = userRecordsRes.data.map(r => r._id);
-
-      const batchDelete = async (ids) => {
-        for (let id of ids) {
-          await db.collection('user_study_records').doc(id).remove();
-        }
-      };
-
-      await batchDelete(recordIds);
-
-      this.grammarList = [];
-      this.currentIndex = 0;
-      this.studyRecords = {};
-
-      wx.showToast({ title: '已重置' });
-      this.loadGrammar();
-    } catch (error) {
-      console.error('重置失败', error);
-      wx.showToast({ title: '重置失败', icon: 'error' });
-    } finally {
-      wx.hideLoading();
-    }
+    this.setData({
+      currentGrammar,
+      currentProficiency: record.proficiency || 0,
+      isFavorite: !!this.favoriteMap[Number(currentGrammar.grammar_id)],
+      showDetail: false,
+      reviewRemaining,
+      newRemaining
+    })
   },
-  async checkFavoriteStatus(grammar_id) {
-    if (!this.userId || !grammar_id) {
-      this.setData({ isFavorite: false });
-      return;
-    }
-    
-    try {
-      const res = await db.collection('user_favorites')
-        .where({ user_id: this.userId, grammar_id })
-        .count();
-      this.setData({ isFavorite: res.total > 0 });
-    } catch (error) {
-      console.error('检查收藏状态失败', error);
-      this.setData({ isFavorite: false });
-    }
-  },
+
   async toggleFavorite() {
-    if (!this.userId || !this.data.currentGrammar) {
-      wx.showToast({ title: '请先登录', icon: 'none' });
-      return;
-    }
-  
-    const grammar_id = this.data.currentGrammar.grammar_id;
-    
-    wx.showLoading({ title: '处理中' });
-    
+    if (!this.data.currentGrammar) return
+    const grammarId = Number(this.data.currentGrammar.grammar_id)
+    wx.showLoading({ title: '处理中...' })
     try {
-      const res = await db.collection('user_favorites')
-        .where({ user_id: this.userId, grammar_id })
-        .get();
-    
-      if (res.data.length > 0) {
-        await db.collection('user_favorites').doc(res.data[0]._id).remove();
-        this.setData({ isFavorite: false });
-        wx.showToast({ title: '已取消收藏', icon: 'none' });
+      const res = await db
+        .collection('user_favorites')
+        .where({ user_id: this.userId, grammar_id: grammarId })
+        .get()
+      const target = this.filterByCollection(res.data).find((item) => Number(item.grammar_id) === grammarId)
+      if (target?._id) {
+        await db.collection('user_favorites').doc(target._id).remove()
+        delete this.favoriteMap[grammarId]
+        this.setData({ isFavorite: false })
+        wx.showToast({ title: '已取消收藏', icon: 'success' })
       } else {
-        await db.collection('user_favorites').add({
+        const addRes = await db.collection('user_favorites').add({
           data: {
             user_id: this.userId,
-            grammar_id,
+            grammar_id: grammarId,
+            collection: this.data.currentCollection,
             create_time: db.serverDate()
           }
-        });
-        this.setData({ isFavorite: true });
-        wx.showToast({ title: '已收藏', icon: 'success' });
+        })
+        this.favoriteMap[grammarId] = { _id: addRes._id, grammar_id: grammarId }
+        this.setData({ isFavorite: true })
+        wx.showToast({ title: '已收藏', icon: 'success' })
       }
     } catch (error) {
-      console.error('收藏操作失败', error);
-      wx.showToast({ title: '操作失败', icon: 'error' });
+      console.error('toggleFavorite failed', error)
+      wx.showToast({ title: '操作失败', icon: 'none' })
     } finally {
-      wx.hideLoading();
+      wx.hideLoading()
     }
   },
+
+  async resetStudy() {
+    wx.showLoading({ title: '重置中...' })
+    try {
+      const res = await db.collection('user_study_records').where({ user_id: this.userId }).get()
+      const targets = this.filterByCollection(res.data)
+      for (const item of targets) {
+        if (item._id) {
+          await db.collection('user_study_records').doc(item._id).remove()
+        }
+      }
+      this.studyRecords = {}
+      await this.loadGrammar()
+      wx.showToast({ title: '已重置', icon: 'success' })
+    } catch (error) {
+      console.error('resetStudy failed', error)
+      wx.showToast({ title: '重置失败', icon: 'none' })
+    } finally {
+      wx.hideLoading()
+    }
+  },
+
+  goToOverview() {
+    wx.navigateTo({
+      url: `/pages/grammar/grammar?collection=${this.data.currentCollection}`
+    })
+  },
+
+  goToFavorites() {
+    wx.navigateTo({
+      url: `/pages/grammar/favorites/favorites?collection=${this.data.currentCollection}`
+    })
+  },
+
   onShareAppMessage() {
     return {
-      title: '日语备考通速记 - 高效备考工具',
-      path: '/pages/grammar/grammar',
-      imageUrl: '../../images/蓝宝书.png' // 准备一张分享图片
+      title: `我正在学习 ${this.data.currentCollectionLabel} 语法`,
+      path: `/pages/grammar/deepstudy/deepstudy?collection=${this.data.currentCollection}`
     }
-  },
-  // 跳转到语法通览页面
-goToOverview() {
-  wx.navigateTo({
-    url: '/pages/grammar/grammar'
-  });
-},
-
-// 跳转到语法收藏页面
-goToFavorites() {
-  wx.navigateTo({
-    url: '/pages/grammar/favorites/favorites'
-  });
-},
-switchTab(e) {
-  const tab = e.currentTarget.dataset.tab;
-  this.setData({ currentTab: tab });
-  if(tab==='overview'){
-    this.goToOverview();
-  } else {
-    this.goToFavorites();
   }
-}
-    
-});
+})

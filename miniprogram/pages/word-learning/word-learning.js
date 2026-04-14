@@ -90,20 +90,51 @@ Page({
   },
 
   async onLoad() {
-    this.loadSettings()
+    if (!this.ensureLoggedIn()) return
+    await this.loadSettings()
     await this.bootstrap()
   },
 
   async onShow() {
+    if (!this.ensureLoggedIn()) return
     const userId = this.getUserId()
     if (userId !== this._lastUserId) {
+      await this.loadSettings()
       this._lastUserId = userId
       await this.bootstrap()
     }
   },
 
+  onHide() {
+    this.persistSessionSnapshot()
+  },
+
+  onUnload() {
+    this.persistSessionSnapshot()
+  },
+
   getUserId() {
     return wx.getStorageSync('userId') || ''
+  },
+
+  ensureLoggedIn() {
+    const userId = this.getUserId()
+    if (userId) return true
+
+    wx.showModal({
+      title: '提示',
+      content: '单词学习需要先登录，是否现在前往登录？',
+      confirmText: '去登录',
+      cancelText: '稍后再说',
+      success: res => {
+        if (res.confirm) {
+          wx.navigateTo({
+            url: '/pages/profile/login/login'
+          })
+        }
+      }
+    })
+    return false
   },
 
   getCurrentCollection() {
@@ -131,6 +162,7 @@ Page({
       currentWordId: words[0] ? words[0]._id : '',
       currentIndex: 0,
       sessionStats: { ...DEFAULT_SESSION_STATS },
+      planStats: {},
       updatedAt: 0
     }
   },
@@ -143,23 +175,74 @@ Page({
     return chunks
   },
 
-  loadSettings() {
+  async loadSettings() {
     const cached = wx.getStorageSync('word_learning_settings')
     const nextLevelIndex = Number.isInteger(cached?.levelIndex) ? cached.levelIndex : this.data.levelIndex
+    const localSettings = {
+      ...DEFAULT_SETTINGS,
+      ...(cached || {})
+    }
+
     this.setData({
       levelIndex: Math.max(0, Math.min(nextLevelIndex, this.data.levels.length - 1)),
-      settings: {
-        ...DEFAULT_SETTINGS,
-        ...(cached || {})
-      }
+      settings: localSettings
     })
+
+    const userId = this.getUserId()
+    if (!userId) return
+
+    try {
+      const result = await this.callWordService('getUserProfile', { userId })
+      if (!result.hasProfile) {
+        await this.saveSettings()
+        return
+      }
+
+      const profile = result.profile || {}
+      const remoteLevelIndex = this.data.levels.findIndex(level => this.data.collectionMap[level] === profile.collection)
+      const mergedLevelIndex = remoteLevelIndex >= 0 ? remoteLevelIndex : this.data.levelIndex
+      const mergedSettings = {
+        ...DEFAULT_SETTINGS,
+        ...localSettings,
+        newLimit: Number(profile.newLimit) || localSettings.newLimit,
+        reviewLimit: Number(profile.reviewLimit) || localSettings.reviewLimit
+      }
+
+      this.setData({
+        levelIndex: mergedLevelIndex,
+        settings: mergedSettings
+      })
+      this.persistLocalSettings()
+    } catch (error) {
+      console.error('loadSettings failed', error)
+    }
   },
 
-  saveSettings() {
+  persistLocalSettings() {
     wx.setStorageSync('word_learning_settings', {
       ...this.data.settings,
       levelIndex: this.data.levelIndex
     })
+  },
+
+  async saveSettings() {
+    this.persistLocalSettings()
+
+    const userId = this.getUserId()
+    if (!userId) return
+
+    try {
+      await this.callWordService('saveUserProfile', {
+        userId,
+        payload: {
+          collection: this.getCurrentCollection(),
+          newLimit: this.data.settings.newLimit,
+          reviewLimit: this.data.settings.reviewLimit
+        }
+      })
+    } catch (error) {
+      console.error('saveSettings failed', error)
+    }
   },
 
   async bootstrap() {
@@ -169,6 +252,10 @@ Page({
       showDetail: false,
       detailWord: null
     })
+
+    if (this._lastUserId) {
+      await this.saveSettings()
+    }
 
     await Promise.all([
       this.buildSession(),
@@ -201,7 +288,8 @@ Page({
         userId,
         collection,
         newLimit: this.data.settings.newLimit,
-        reviewLimit: this.data.settings.reviewLimit
+        reviewLimit: this.data.settings.reviewLimit,
+        dateKey: this.getTodayKey()
       })
 
       const sessionWords = (result.sessionWords || []).map(word => {
@@ -212,11 +300,14 @@ Page({
           stageLabel: this.getStageLabel(stage)
         }
       })
-      const snapshot = await this.getPersistedSessionSnapshot(sessionWords)
+      const snapshot = await this.getPersistedSessionSnapshot(sessionWords, result.progress || null)
       const restored = this.restoreSessionFromCache(sessionWords, snapshot)
       const finalWords = restored.words
       const sessionIndex = restored.index
       const currentWord = finalWords[sessionIndex] || null
+      const dashboardSource = snapshot && snapshot.planStats && Object.keys(snapshot.planStats).length
+        ? snapshot.planStats
+        : (result.stats || {})
 
       this.setData({
         sessionWords: finalWords,
@@ -230,23 +321,24 @@ Page({
         sessionLoading: false,
         dashboard: {
           ...this.data.dashboard,
-          ...(result.stats || {}),
-          learnedPercent: this.computeLearnedPercent(result.stats || {}),
-          learnedPercentWidth: this.toPercentWidth(this.computeLearnedPercent(result.stats || {})),
-          finishEtaText: this.computeFinishEta(result.stats || {})
+          ...dashboardSource,
+          learnedPercent: this.computeLearnedPercent(dashboardSource),
+          learnedPercentWidth: this.toPercentWidth(this.computeLearnedPercent(dashboardSource)),
+          finishEtaText: this.computeFinishEta(dashboardSource)
         },
         sessionStats: restored.stats,
         queueStats: this.computeQueueStats(finalWords),
-        sessionProgressPercent: this.computeSessionProgress(restored.stats, result.stats || {}),
-        sessionProgressWidth: this.toPercentWidth(this.computeSessionProgress(restored.stats, result.stats || {}))
+        sessionProgressPercent: this.computeSessionProgress(restored.stats, dashboardSource),
+        sessionProgressWidth: this.toPercentWidth(this.computeSessionProgress(restored.stats, dashboardSource))
       })
 
       this.refreshMapsFromWords(finalWords)
-      this.persistSessionSnapshot({
+      await this.persistSessionSnapshot({
         queueIds: finalWords.map(word => word._id),
         currentWordId: currentWord ? currentWord._id : '',
         currentIndex: sessionIndex,
-        sessionStats: restored.stats
+        sessionStats: restored.stats,
+        planStats: this.pickPlanStats(dashboardSource)
       })
     } catch (error) {
       console.error('buildSession failed', error)
@@ -258,22 +350,25 @@ Page({
     }
   },
 
-  async getPersistedSessionSnapshot(words = []) {
+  async getPersistedSessionSnapshot(words = [], preferredCloudSnapshot = null) {
     const fallback = this.getDefaultSessionSnapshot(words)
     const local = wx.getStorageSync(this.getSessionCacheKey())
     const todayKey = this.getTodayKey()
     const userId = this.getUserId()
 
-    let cloudSnapshot = null
+    let cloudSnapshot = preferredCloudSnapshot
     if (userId) {
-      try {
-        const result = await this.callWordService('getProgress', {
-          userId,
-          collection: this.getCurrentCollection()
-        })
-        cloudSnapshot = result.progress || null
-      } catch (error) {
-        cloudSnapshot = null
+      if (!cloudSnapshot) {
+        try {
+          const result = await this.callWordService('getProgress', {
+            userId,
+            collection: this.getCurrentCollection(),
+            dateKey: this.getTodayKey()
+          })
+          cloudSnapshot = result.progress || null
+        } catch (error) {
+          cloudSnapshot = null
+        }
       }
     }
 
@@ -315,9 +410,14 @@ Page({
   },
 
   persistSessionSnapshot(overrides = {}) {
+    const nextQueueIds = overrides.queueIds || this.data.sessionWords.map(word => word._id)
+    if (!nextQueueIds.length && !this.data.sessionCompleted) {
+      return Promise.resolve()
+    }
+
     const payload = {
       dateKey: this.getTodayKey(),
-      queueIds: overrides.queueIds || this.data.sessionWords.map(word => word._id),
+      queueIds: nextQueueIds,
       currentWordId: Object.prototype.hasOwnProperty.call(overrides, 'currentWordId')
         ? overrides.currentWordId
         : (this.data.currentWord ? this.data.currentWord._id : ''),
@@ -325,11 +425,12 @@ Page({
         ? overrides.currentIndex
         : this.data.sessionIndex,
       sessionStats: overrides.sessionStats || this.data.sessionStats,
+      planStats: overrides.planStats || this.pickPlanStats(this.data.dashboard),
       updatedAt: Date.now()
     }
 
     wx.setStorageSync(this.getSessionCacheKey(), payload)
-    this.persistCloudProgress(payload)
+    return this.persistCloudProgress(payload)
   },
 
   async persistCloudProgress(payload) {
@@ -342,6 +443,7 @@ Page({
         collection: this.getCurrentCollection(),
         payload: {
           ...payload,
+          sessionStats: payload.sessionStats,
           completedCount: payload.sessionStats.completed || 0
         }
       })
@@ -363,6 +465,19 @@ Page({
       })
     } catch (error) {
       console.error('clearProgress failed', error)
+    }
+  },
+
+  pickPlanStats(dashboard) {
+    return {
+      totalWords: dashboard.totalWords || 0,
+      learnedWords: dashboard.learnedWords || 0,
+      dueCount: dashboard.dueCount || 0,
+      availableNewCount: dashboard.availableNewCount || 0,
+      masteredCount: dashboard.masteredCount || 0,
+      sessionSize: dashboard.sessionSize || 0,
+      reviewPlanned: dashboard.reviewPlanned || 0,
+      newPlanned: dashboard.newPlanned || 0
     }
   },
 
@@ -596,7 +711,7 @@ Page({
   },
 
   async applySettings() {
-    this.saveSettings()
+    await this.saveSettings()
     this.setData({ showSettings: false })
     await this.clearPersistedSessionSnapshot()
     await this.buildSession()
@@ -620,7 +735,7 @@ Page({
       showSettings: false
     })
 
-    this.saveSettings()
+    await this.saveSettings()
     await this.bootstrap()
   },
 
@@ -707,7 +822,7 @@ Page({
       return
     }
 
-    this.applyRatingResult(rating, result)
+    await this.applyRatingResult(rating, result)
   },
 
   getGuestResult(word, rating) {
@@ -726,7 +841,7 @@ Page({
     }
   },
 
-  applyRatingResult(rating, result) {
+  async applyRatingResult(rating, result) {
     const currentWord = this.data.currentWord
     const sessionWords = this.data.sessionWords.slice()
     const currentIndex = this.data.sessionIndex
@@ -812,7 +927,7 @@ Page({
     })
 
     this.autoPlayCurrentWordAudio(updatedWord)
-    this.persistSessionSnapshot({
+    await this.persistSessionSnapshot({
       queueIds: sessionWords.map(word => word._id),
       currentWordId: updatedWord._id,
       currentIndex: nextIndex,

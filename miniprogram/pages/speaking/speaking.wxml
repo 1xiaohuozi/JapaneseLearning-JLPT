@@ -1,65 +1,58 @@
-<view class="container">   
-  <!-- 顶部固定标题和切换 -->
+<view class="container">
   <view class="section-header">
     <view class="title-container">
-      <text class="section-title" bindtap="toggleSectionDropdown">{{sectionTitle}}</text>
-      <text class="dropdown-arrow">{{showDropdown ? '▲' : '▼'}}</text>
+      <view class="title-row">
+        <text class="section-title" bindtap="toggleSectionDropdown">{{sectionTitle}}</text>
+        <text class="dropdown-arrow">{{showDropdown ? '▲' : '▼'}}</text>
+      </view>
       <view class="title-decoration"></view>
-  <!-- 进度条 -->
-  <view class="listening-progress-container">
-    <view class="progress-bar">
-      <view class="progress-fill" style="width: {{listeningProgressStr}}"></view>
 
-    </view>
-    <text class="progress-text">{{listeningProgress | toFixed(0)}}%</text>
-  </view>
-      <!-- 下拉菜单 -->
-    <!-- 下拉菜单 -->
-<scroll-view 
-  wx:if="{{showDropdown}}" 
-  class="dropdown-menu" 
-  scroll-y 
-  scroll-into-view="{{currentSectionId}}"
-  scroll-with-animation
->
-<block wx:for="{{sections}}" wx:key="_id" wx:for-item="item">
-  <view id="section-{{item._id}}" class="dropdown-item {{item._id === sectionId ? 'active' : ''}}" 
-        bindtap="selectSection" data-id="{{item._id}}">
-    {{item.title}}
-    <image wx:if="{{item.isLearned}}" src="/images/绿勾.png" class="learned-checkmark-img" />
-    <text wx:if="{{item.playCount > 0}}" class="play-count">x{{item.playCount}}</text>
-  </view>
-</block>
+      <view class="listening-progress-container">
+        <view class="progress-bar">
+          <view class="progress-fill" style="width: {{listeningProgressStr}}"></view>
+        </view>
+        <text class="progress-text">{{listeningProgressStr}}</text>
+      </view>
 
-</scroll-view>
+      <view class="section-meta">
+        <text class="section-meta-item">{{currentIsLearned ? '已学习' : '未学习'}}</text>
+        <text class="section-meta-item">播放 {{currentPlayCount}}</text>
+      </view>
 
-    </view>
-
-    <view class="nav-buttons">
-      <button class="nav-btn prev-btn" bindtap="prevSection" hover-class="btn-hover" style="position: relative; left: -46rpx; top: -1rpx">
-        ◀ 上一小节
-      </button>
-      <button class="nav-btn next-btn" bindtap="nextSection" hover-class="btn-hover" style="position: relative; left: -38rpx; top: 0rpx">
-        下一小节 ▶
-      </button>
-      <!-- <button class="nav-btn fix-btn" bindtap="fixOrder" hover-class="btn-hover" style="margin-left: 20rpx; background: #f43f5e; color: #fff;">
-    修复排序
-  </button> -->
+      <scroll-view
+        wx:if="{{showDropdown}}"
+        class="dropdown-menu"
+        scroll-y
+        scroll-into-view="{{currentSectionId}}"
+        scroll-with-animation
+      >
+        <block wx:for="{{sections}}" wx:key="_id" wx:for-item="item">
+          <view
+            id="section-{{item._id}}"
+            class="dropdown-item {{item._id === sectionId ? 'active' : ''}}"
+            bindtap="selectSection"
+            data-id="{{item._id}}"
+          >
+            <text class="dropdown-item-title">{{item.title}}</text>
+            <view class="dropdown-item-side">
+              <image wx:if="{{item.isLearned}}" src="/images/绿勾.png" class="learned-checkmark-img" />
+              <text wx:if="{{item.playCount > 0}}" class="play-count">x{{item.playCount}}</text>
+            </view>
+          </view>
+        </block>
+      </scroll-view>
     </view>
   </view>
 
-  <!-- 对话展示 -->
   <scroll-view scroll-y="true" class="dialogue-list" scroll-with-animation>
-    <block wx:for="{{dialogueList}}" wx:key="id">
+    <block wx:for="{{dialogueList}}" wx:key="index">
       <view class="dialogue-card {{currentPlayingIndex === index ? 'playing' : ''}}">
         <view class="card-header">
           <view class="speaker-container">
             <view class="speaker-dot"></view>
             <text class="speaker">{{item.speaker}}：</text>
           </view>
-          <!-- 已学习勾勾 -->
-      
-          <button class="translate-btn" bindtap="toggleTranslation" data-index="{{index}}" hover-class="btn-hover" style="position: relative; left: 249rpx; top: -4rpx">
+          <button class="translate-btn" bindtap="toggleTranslation" data-index="{{index}}" hover-class="btn-hover">
             {{showTranslation[index] ? '隐藏翻译' : '翻译'}}
           </button>
         </view>
@@ -82,61 +75,65 @@
     </view>
   </scroll-view>
 
-  <!-- 底部固定播放器 -->
-<!-- 底部固定播放器 -->
-<view class="audio-controls">
-  <view class="player-top">
-    <view class="audio-btn-wrapper" bindtap="togglePlay">
-      <image 
-        class="audio-btn-img {{isPlaying ? 'playing' : ''}}" 
-        src="{{isPlaying ? '/images/pause.png' : '/images/play.png'}}" 
-        mode="aspectFit"
+  <view class="audio-controls">
+    <view class="player-top">
+      <button class="section-switch-btn prev-inline" bindtap="prevSection" hover-class="btn-hover">
+        <text class="switch-icon">◀</text>
+        <text>上小节</text>
+      </button>
+      <view class="audio-btn-wrapper" bindtap="togglePlay">
+        <image
+          class="audio-btn-img {{isPlaying ? 'playing' : ''}}"
+          src="{{isPlaying ? '/images/pause.png' : '/images/play.png'}}"
+          mode="aspectFit"
+        />
+      </view>
+      <button class="section-switch-btn next-inline" bindtap="nextSection" hover-class="btn-hover">
+        <text>下小节</text>
+        <text class="switch-icon">▶</text>
+      </button>
+    </view>
+
+    <view class="player-bottom">
+      <view class="time-display">
+        <text class="time">{{currentTimeStr}}</text>
+        <text class="time">{{durationStr}}</text>
+      </view>
+      <slider
+        min="0"
+        max="{{duration}}"
+        value="{{currentTime}}"
+        bindchange="onSliderChange"
+        activeColor="#7c3aed"
+        backgroundColor="#e2e8f0"
+        block-color="#7c3aed"
+        block-size="16"
+        class="custom-slider"
       />
     </view>
   </view>
-  <view class="player-bottom">
-    <view class="time-display">
-      <text class="time">{{currentTimeStr}}</text>
-      <text class="time" style="width: 69rpx; display: block; box-sizing: border-box">{{durationStr}}</text>
-    </view>
-    <slider 
-      min="0" 
-      max="{{duration}}" 
-      value="{{currentTime}}" 
-      bindchange="onSliderChange"
-      activeColor="#7c3aed"
-      backgroundColor="#e2e8f0"
-      block-color="#7c3aed"
-      block-size="16"
-      class="custom-slider"
-    />
-  </view>
 </view>
 
-</view>
-<!-- 首次进入弹窗 -->
 <view wx:if="{{showFirstTimeModal}}" class="modal-overlay">
   <view class="modal-box">
     <text class="modal-title">学习提示</text>
     <view class="modal-content-wrapper">
-  <view class="modal-paragraph">
-    <text>欢迎使用影子跟读练习！通过跟读和锻炼口语、听力可以更快提高日语水平。</text>
-  </view>
-  <view class="modal-paragraph">
-    <text>本板块内容完全参照新版新シャドーイング 日本語を話そう 中~上級編，适合 N2~N1 水平的听力与口语锻炼。</text>
-  </view>
-  <view class="modal-paragraph">
-    <text>每天坚持 10 分钟，反复练习，一个月就能看到立竿见影的效果。</text>
-  </view>
-  <view class="modal-paragraph notice">
-    <text>注意：只有完整播放完音频才算增加学习次数哦</text>
-  </view>
-</view>
+      <view class="modal-paragraph">
+        <text>欢迎使用影子跟读练习。通过反复听和跟读，可以更快提升听力与口语。</text>
+      </view>
+      <view class="modal-paragraph">
+        <text>建议每天坚持 10 分钟，音频完整播放结束后才会计入学习次数。</text>
+      </view>
+      <view class="modal-paragraph notice">
+        <text>如果你不想再看到这条提示，可以打开下面的“不再提示”。</text>
+      </view>
+    </view>
 
     <view class="modal-footer">
-      <checkbox class="dont-show" bindchange="toggleDontShowAgain" checked="{{dontShowAgain}}">
-        不再提示
-      </checkbox>
+      <view class="dont-show-row">
+        <text class="dont-show-label">不再提示</text>
+        <switch color="#7c3aed" checked="{{dontShowAgain}}" bindchange="toggleDontShowAgain" />
+      </view>
       <button class="modal-btn" bindtap="closeFirstTimeModal">我知道了</button>
     </view>
   </view>

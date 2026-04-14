@@ -1,264 +1,274 @@
-// 获取数据库引用
-const db = wx.cloud.database();
-const scoreCollection = db.collection('user_jlptscores');
+const db = wx.cloud.database()
+const scoreCollection = db.collection('user_jlptscores')
+
+const LEVEL_CONFIGS = {
+  N1: {
+    title: 'JLPT N1',
+    totalScore: 180,
+    overallPass: 100,
+    sections: [
+      { key: 'language', title: '语言知识', subtitle: '文字词汇 + 语法', scoreMax: 60, passMark: 19, placeholder: '例如 38/55' },
+      { key: 'reading', title: '阅读', subtitle: '长文与信息检索', scoreMax: 60, passMark: 19, placeholder: '例如 18/25' },
+      { key: 'listening', title: '听力', subtitle: '课题理解 + 即时应答', scoreMax: 60, passMark: 19, placeholder: '例如 22/30' }
+    ]
+  },
+  N2: {
+    title: 'JLPT N2',
+    totalScore: 180,
+    overallPass: 90,
+    sections: [
+      { key: 'language', title: '语言知识', subtitle: '文字词汇 + 语法', scoreMax: 60, passMark: 19, placeholder: '例如 34/47' },
+      { key: 'reading', title: '阅读', subtitle: '信息理解与长文', scoreMax: 60, passMark: 19, placeholder: '例如 20/25' },
+      { key: 'listening', title: '听力', subtitle: '课题理解 + 综合理解', scoreMax: 60, passMark: 19, placeholder: '例如 21/30' }
+    ]
+  },
+  N3: {
+    title: 'JLPT N3',
+    totalScore: 180,
+    overallPass: 95,
+    sections: [
+      { key: 'language', title: '语言知识', subtitle: '文字词汇 + 语法', scoreMax: 60, passMark: 19, placeholder: '例如 36/48' },
+      { key: 'reading', title: '阅读', subtitle: '中篇与长文阅读', scoreMax: 60, passMark: 19, placeholder: '例如 18/24' },
+      { key: 'listening', title: '听力', subtitle: '对话与概要理解', scoreMax: 60, passMark: 19, placeholder: '例如 20/28' }
+    ]
+  },
+  N4: {
+    title: 'JLPT N4',
+    totalScore: 180,
+    overallPass: 90,
+    sections: [
+      { key: 'languageReading', title: '语言知识 + 阅读', subtitle: '词汇语法与基础阅读', scoreMax: 120, passMark: 38, placeholder: '例如 52/80' },
+      { key: 'listening', title: '听力', subtitle: '场景理解与对话理解', scoreMax: 60, passMark: 19, placeholder: '例如 18/28' }
+    ]
+  },
+  N5: {
+    title: 'JLPT N5',
+    totalScore: 180,
+    overallPass: 80,
+    sections: [
+      { key: 'languageReading', title: '语言知识 + 阅读', subtitle: '基础词汇语法与短文', scoreMax: 120, passMark: 38, placeholder: '例如 48/80' },
+      { key: 'listening', title: '听力', subtitle: '短对话与简短说明', scoreMax: 60, passMark: 19, placeholder: '例如 17/28' }
+    ]
+  }
+}
+
+function getTodayString() {
+  const today = new Date()
+  const y = today.getFullYear()
+  const m = String(today.getMonth() + 1).padStart(2, '0')
+  const d = String(today.getDate()).padStart(2, '0')
+  return `${y}/${m}/${d}`
+}
+
+function createSectionInputs(level) {
+  const config = LEVEL_CONFIGS[level]
+  return (config.sections || []).map(section => ({
+    key: section.key,
+    total: '',
+    correct: ''
+  }))
+}
+
+function ratioToGrade(ratio) {
+  if (ratio >= 0.67) return 'A'
+  if (ratio >= 0.34) return 'B'
+  return 'C'
+}
 
 Page({
   data: {
-    showPopup: false,
-    showHistoryPopup: false,
-    showSaveBtn: false,
-    sections: [
-      {
-        title: "文字・語彙",
-        questions: [
-          { index: 1, placeholder: "5", mdscore: 5, total: 5, correct: 0 },
-          { index: 2, placeholder: "5", mdscore: 5, total: 5, correct: 0 },
-          { index: 3, placeholder: "3", mdscore: 5, total: 3, correct: 0 },
-          { index: 4, placeholder: "7", mdscore: 7, total: 7, correct: 0 },
-          { index: 5, placeholder: "5", mdscore: 5, total: 5, correct: 0 },
-          { index: 6, placeholder: "5", mdscore: 10, total: 5, correct: 0 }
-        ]
-      },
-      {
-        title: "文法",
-        questions: [
-          { index: 7, placeholder: "12", mdscore: 12, total: 12, correct: 0 },
-          { index: 8, placeholder: "5", mdscore: 6, total: 5, correct: 0 },
-          { index: 9, placeholder: "4", mdscore: 5, total: 4, correct: 0 }
-        ]
-      },
-      {
-        title: "読解",
-        questions: [
-          { index: 10, placeholder: "5", mdscore: 10, total: 5, correct: 0 },
-          { index: 11, placeholder: "8", mdscore: 27, total: 8, correct: 0 },
-          { index: 12, placeholder: "2", mdscore: 6, total: 2, correct: 0 },
-          { index: 13, placeholder: "3", mdscore: 9, total: 3, correct: 0 },
-          { index: 14, placeholder: "2", mdscore: 8, total: 2, correct: 0 }
-        ]
-      },
-      {
-        title: "聴解",
-        questions: [
-          { index: 1, placeholder: "5", mdscore: 10, total: 5, correct: 0 },
-          { index: 2, placeholder: "6", mdscore: 12, total: 6, correct: 0 },
-          { index: 3, placeholder: "5", mdscore: 10, total: 5, correct: 0 },
-          { index: 4, placeholder: "11", mdscore: 12, total: 11, correct: 0 },
-          { index: 5, placeholder: "3", mdscore: 16, total: 3, correct: 0 }
-        ]
-      }
-    ],
+    currentLevel: 'N2',
+    levelTabs: Object.keys(LEVEL_CONFIGS),
+    levelConfig: LEVEL_CONFIGS.N2,
+    sectionInputs: createSectionInputs('N2'),
     result: {
-      vocabGrammar: 0,
-      reading: 0,
-      listening: 0,
+      level: 'N2',
       total: 0,
       pass: false,
-      grade: { vocab: '', grammar: '', reading: '', listening: '' },
-      date: ''
+      date: getTodayString(),
+      sectionScores: [],
+      overallPass: 0,
+      totalScore: 0
     },
+    showPopup: false,
+    showHistoryPopup: false,
     historyList: [],
-    currentScoreData: null,
-    error: false,       // 是否报错，用于高亮
-    errorMsg: ''        // 错误提示信息
-
+    currentScoreData: null
   },
 
   onLoad() {
-    // 设置当天日期
-    const today = new Date();
-    const y = today.getFullYear();
-    const m = String(today.getMonth() + 1).padStart(2, '0');
-    const d = String(today.getDate()).padStart(2, '0');
+    this.loadHistory()
+  },
+
+  switchLevel(e) {
+    const level = e.currentTarget.dataset.level
+    if (!LEVEL_CONFIGS[level]) return
+
     this.setData({
-      'result.date': `${y}/${m}/${d}`
-    });
-
-    // 加载历史记录
-    this.loadHistory();
+      currentLevel: level,
+      levelConfig: LEVEL_CONFIGS[level],
+      sectionInputs: createSectionInputs(level),
+      result: {
+        level,
+        total: 0,
+        pass: false,
+        date: getTodayString(),
+        sectionScores: [],
+        overallPass: LEVEL_CONFIGS[level].overallPass,
+        totalScore: LEVEL_CONFIGS[level].totalScore
+      }
+    })
   },
 
-  // 输入题目总数
   onInputTotal(e) {
-    const { sid, qid } = e.currentTarget.dataset;
-    let value = e.detail.value.trim();
-
-    // 校验是否为正整数
-    if (!/^\d+$/.test(value)) {
-      wx.showToast({
-        title: `第${qid}题总题数必须为数字`,
-        icon: 'none'
-      });
-      value = 0;
-    }
-
-    value = Number(value);
-    let sections = this.data.sections;
-    let section = sections[sid];
-    let q = section.questions.find(q => q.index == qid);
-    if (q) {
-      q.total = value > 0 ? value : 0;
-      // 自动调整之前输入的正确数不超过总题数
-      if (q.correct > q.total) {
-        q.correct = q.total;
-      }
-    }
-    this.setData({ sections });
+    const index = Number(e.currentTarget.dataset.index)
+    const value = e.detail.value.trim()
+    const sectionInputs = this.data.sectionInputs.slice()
+    sectionInputs[index].total = value
+    this.setData({ sectionInputs })
   },
 
-  // 输入正确数
   onInputCorrect(e) {
-    const { sid, qid } = e.currentTarget.dataset;
-    let value = e.detail.value.trim();
-
-    // 校验是否为数字
-    if (!/^\d+$/.test(value)) {
-      wx.showToast({
-        title: `第${qid}题正确数必须为数字`,
-        icon: 'none'
-      });
-      value = 0;
-    }
-
-    value = Number(value);
-    let sections = this.data.sections;
-    let section = sections[sid];
-    let q = section.questions.find(q => q.index == qid);
-    if (q) {
-      // 校验不超过总题数
-      if (value > q.total) {
-        wx.showToast({
-          title: `第${qid}题正确数不能超过总题数 (${q.total})`,
-          icon: 'none'
-        });
-        value = q.total;
-      }
-      q.correct = value;
-    }
-    this.setData({ sections });
+    const index = Number(e.currentTarget.dataset.index)
+    const value = e.detail.value.trim()
+    const sectionInputs = this.data.sectionInputs.slice()
+    sectionInputs[index].correct = value
+    this.setData({ sectionInputs })
   },
 
-  // 计算分数
-  calcScore() {
-    const { sections, result } = this.data;
-    let mg = 0, bp = 0, dk = 0, ck = 0;
+  validateInputs() {
+    const { sectionInputs, levelConfig } = this.data
+    for (let i = 0; i < sectionInputs.length; i += 1) {
+      const input = sectionInputs[i]
+      const total = Number(input.total)
+      const correct = Number(input.correct)
+      const section = levelConfig.sections[i]
 
-    sections[0].questions.forEach(q => mg += (q.correct * q.mdscore) / q.total);
-    sections[1].questions.forEach(q => bp += (q.correct * q.mdscore) / q.total);
-    sections[2].questions.forEach(q => dk += (q.correct * q.mdscore) / q.total);
-    sections[3].questions.forEach(q => ck += (q.correct * q.mdscore) / q.total);
+      if (!Number.isFinite(total) || total <= 0) {
+        wx.showToast({ title: `${section.title} 的总题数无效`, icon: 'none' })
+        return null
+      }
 
-    const vocabGrammar = Math.round(mg + bp);
-    const reading = Math.round(dk);
-    const listening = Math.round(ck);
-    const total = vocabGrammar + reading + listening;
+      if (!Number.isFinite(correct) || correct < 0) {
+        wx.showToast({ title: `${section.title} 的正确数无效`, icon: 'none' })
+        return null
+      }
 
-    const pass = (vocabGrammar >= 19 && reading >= 19 && listening >= 19 && total >= 90);
-
-    function getGrade(score, full) {
-      const ratio = score / full;
-      if (ratio >= 0.67) return 'A';
-      if (ratio >= 0.34) return 'B';
-      return 'C';
+      if (correct > total) {
+        wx.showToast({ title: `${section.title} 的正确数不能大于总题数`, icon: 'none' })
+        return null
+      }
     }
 
-    const scoreData = {
-      vocabGrammar,
-      reading,
-      listening,
+    return sectionInputs.map(item => ({
+      total: Number(item.total),
+      correct: Number(item.correct)
+    }))
+  },
+
+  calcScore() {
+    const validated = this.validateInputs()
+    if (!validated) return
+
+    const { currentLevel, levelConfig } = this.data
+    const sectionScores = levelConfig.sections.map((section, index) => {
+      const total = validated[index].total
+      const correct = validated[index].correct
+      const ratio = total > 0 ? (correct / total) : 0
+      const score = Math.round(ratio * section.scoreMax)
+      return {
+        key: section.key,
+        title: section.title,
+        subtitle: section.subtitle,
+        total,
+        correct,
+        score,
+        scoreMax: section.scoreMax,
+        passMark: section.passMark,
+        pass: score >= section.passMark,
+        grade: ratioToGrade(ratio)
+      }
+    })
+
+    const total = sectionScores.reduce((sum, item) => sum + item.score, 0)
+    const pass = total >= levelConfig.overallPass && sectionScores.every(item => item.pass)
+
+    const result = {
+      level: currentLevel,
       total,
       pass,
-      grade: {
-        vocab: getGrade(mg, 60),
-        grammar: getGrade(bp, 60),
-        reading: getGrade(dk, 60),
-        listening: getGrade(ck, 60)
-      },
-      date: result.date,
-      createTime: new Date()
-    };
+      date: getTodayString(),
+      sectionScores,
+      overallPass: levelConfig.overallPass,
+      totalScore: levelConfig.totalScore
+    }
 
     this.setData({
-      result: {
+      result,
+      currentScoreData: {
         ...result,
-        ...scoreData
+        user_id: wx.getStorageSync('userId') || '',
+        createTime: db.serverDate()
       },
-      showPopup: true,
-      showSaveBtn: true,
-      currentScoreData: scoreData
-    });
-    this.saveScore();
+      showPopup: true
+    })
+
+    this.saveScore()
   },
 
-  // 保存分数到云数据库
   async saveScore() {
+    if (!this.data.currentScoreData) return
+
     try {
-      const result = await scoreCollection.add({
-        data: {
-          ...this.data.currentScoreData,
-          createTime: db.serverDate()
-        }
-      });
-
-      // 重新加载历史记录
-      this.loadHistory();
-      this.setData({ showSaveBtn: false });
-
+      await scoreCollection.add({
+        data: this.data.currentScoreData
+      })
+      this.loadHistory()
     } catch (error) {
-      console.error('保存失败:', error);
+      console.error('save jlpt score failed', error)
       wx.showToast({
         title: '保存失败',
-        icon: 'error'
-      });
+        icon: 'none'
+      })
     }
   },
 
-  // 加载历史记录
   async loadHistory() {
     try {
-      const res = await scoreCollection
-        .orderBy('createTime', 'desc')
-        .limit(20)
-        .get();
-
+      const userId = wx.getStorageSync('userId') || ''
+      let query = scoreCollection.orderBy('createTime', 'desc').limit(20)
+      if (userId) {
+        query = scoreCollection.where({ user_id: userId }).orderBy('createTime', 'desc').limit(20)
+      }
+      const res = await query.get()
       this.setData({
-        historyList: res.data
-      });
+        historyList: res.data || []
+      })
     } catch (error) {
-      console.error('加载历史记录失败:', error);
+      console.error('load jlpt history failed', error)
     }
   },
 
-  // 显示历史记录弹窗
   showHistory() {
-    this.loadHistory();
-    this.setData({
-      showHistoryPopup: true
-    });
+    this.loadHistory()
+    this.setData({ showHistoryPopup: true })
   },
 
-  // 选择历史记录
   selectHistory(e) {
-    const item = e.currentTarget.dataset.item;
+    const item = e.currentTarget.dataset.item
+    if (!item) return
     this.setData({
-      result: {
-        ...this.data.result,
-        ...item
-      },
+      result: item,
       showPopup: true,
-      showHistoryPopup: false,
-      showSaveBtn: false
-    });
+      showHistoryPopup: false
+    })
   },
 
   closePopup() {
-    this.setData({
-      showPopup: false,
-      showSaveBtn: false
-    });
+    this.setData({ showPopup: false })
   },
 
   closeHistoryPopup() {
-    this.setData({ showHistoryPopup: false });
+    this.setData({ showHistoryPopup: false })
   }
-});
+})

@@ -1,539 +1,599 @@
-// pages/grammar/grammar.js
-const db = wx.cloud.database();
-const _ = db.command;
-const BATCH_SIZE = 20; // 微信云开发每批最多20条
-const PRELOAD_THRESHOLD = 3; // 距离底部3条时预加载
+const db = wx.cloud.database()
+const _ = db.command
+
+const SETTINGS_KEY = 'grammar_learning_settings'
+const RECORDS_COLLECTION = 'user_study_records'
+const FAVORITES_COLLECTION = 'user_favorites'
+const PAGE_SIZE = 12
+const BATCH_SIZE = 20
+
+const COLLECTIONS = [
+  { key: 'n1_grammar', label: 'N1', theme: 'summit' },
+  { key: 'n2_grammar', label: 'N2', theme: 'ocean' },
+  { key: 'n3_grammar', label: 'N3', theme: 'forest' },
+  { key: 'n4n5_grammar', label: 'N4/N5', theme: 'sunrise' }
+]
+
+function getDefaultCollectionKey() {
+  return COLLECTIONS[1].key
+}
+
+function getCollectionConfig(collectionKey) {
+  return COLLECTIONS.find((item) => item.key === collectionKey) || COLLECTIONS[1]
+}
+
+function getSafeDateString(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate()
+  ).padStart(2, '0')}`
+}
 
 Page({
   data: {
+    collections: COLLECTIONS,
+    currentCollection: getDefaultCollectionKey(),
+    currentCollectionLabel: getCollectionConfig(getDefaultCollectionKey()).label,
+    currentTheme: getCollectionConfig(getDefaultCollectionKey()).theme,
     mode: 'order',
     grammarList: [],
     userRecords: {},
+    favoriteMap: {},
     currentPage: 1,
-    pageSize: 10,
     hasMore: true,
     loading: false,
+    loadingText: '',
     searchText: '',
+    showMeaning: true,
     showModal: false,
     currentGrammar: null,
     currentProficiency: 0,
-    currentRecordId: null,
+    currentRecordId: '',
+    isFavorite: false,
     isLoggedIn: false,
-    loadingText: '',
-    loadProgress: 0,
-    isFavorite: false, // 新增：当前语法是否收藏
     userId: '',
-    showMeaning: true
+    stats: {
+      total: 0,
+      learned: 0,
+      mastered: 0,
+      favorites: 0,
+      percent: '0.0'
+    }
   },
 
   onLoad(options) {
-    this.initData();
-    this.loadGrammarList(() => {
-      // 检查是否有从分享进入的语法ID参数
-      if (options.grammar_id) {
-        const grammarId = Number(options.grammar_id);
-        this.showGrammarDetailById(grammarId);
-      }
-    });
-    
-    this.checkLoginStatus().then(loggedIn => {
-      if (loggedIn) this.initUserRecords();
-    });
-  },
-  
+    const settings = this.loadSettings()
+    const collectionFromOptions = options.collection
+    const collectionKey = this.normalizeCollection(collectionFromOptions || settings.collectionKey)
+    const showMeaning = typeof settings.showMeaning === 'boolean' ? settings.showMeaning : true
+    const mode = settings.mode === 'random' ? 'random' : 'order'
+    const searchText = options.search ? decodeURIComponent(options.search) : ''
 
-  onShow() {
-    this.checkLoginStatus();
+    this.setCollectionState(collectionKey, { showMeaning, mode, searchText })
+    this.bootstrap(options)
+  },
+
+  async onShow() {
+    await this.refreshLoginState()
+    if (this.data.isLoggedIn) {
+      await this.loadCollectionMeta()
+    }
   },
 
   onReachBottom() {
-    if (this.data.hasMore && !this.data.loading) {
-      this.loadMore();
+    if (!this.data.loading && this.data.hasMore && this.data.mode === 'order') {
+      this.loadMore()
     }
   },
 
   onPullDownRefresh() {
+    this.reloadPage().finally(() => wx.stopPullDownRefresh())
+  },
+
+  loadSettings() {
+    return wx.getStorageSync(SETTINGS_KEY) || {}
+  },
+
+  saveSettings(extra = {}) {
+    const prev = this.loadSettings()
+    wx.setStorageSync(SETTINGS_KEY, {
+      ...prev,
+      collectionKey: this.data.currentCollection,
+      showMeaning: this.data.showMeaning,
+      mode: this.data.mode,
+      ...extra
+    })
+  },
+
+  normalizeCollection(collectionKey) {
+    return getCollectionConfig(collectionKey).key
+  },
+
+  setCollectionState(collectionKey, extra = {}) {
+    const config = getCollectionConfig(collectionKey)
     this.setData({
-      grammarList: [],
-      currentPage: 1,
-      hasMore: true,
-      userRecords: {}
-    }, () => {
-      getApp().globalData.userRecordsCache = {};
-      this.loadGrammarList(() => {
-        wx.stopPullDownRefresh();
-      });
-    });
+      currentCollection: config.key,
+      currentCollectionLabel: config.label,
+      currentTheme: config.theme,
+      ...extra
+    })
   },
 
-  initData() {
-    this._currentLoadId = 0; // 防止请求乱序
-    this._preloadQueue = new Set(); // 预加载队列
-  },
-
- // 修改：检查登录状态时保存userId
- async checkLoginStatus() {
-  const app = getApp();
-  if (app.globalData.userId) {
-    this.setData({ 
-      isLoggedIn: true,
-      userId: app.globalData.userId 
-    });
-    return true;
-  }
-  
-  try {
-    const { result } = await wx.cloud.callFunction({
-      name: 'login'
-    });
-    if (result.openid) {
-      app.globalData.userId = result.openid;
-      this.setData({ 
-        isLoggedIn: true,
-        userId: result.openid 
-      });
-      return true;
+  async bootstrap(options = {}) {
+    await this.refreshLoginState()
+    if (options.grammar_id) {
+      this._pendingGrammarId = Number(options.grammar_id)
     }
-  } catch (err) {
-    console.error('登录检查失败:', err);
-  }
-  this.setData({ 
-    isLoggedIn: false,
-    userId: '' 
-  });
-  return false;
-},
-
-
-  initUserRecords() {
-    this.setData({
-      userRecords: getApp().globalData.userRecordsCache || {}
-    });
+    await this.reloadPage()
   },
 
-  async loadGrammarList(callback) {
-    if (this.data.loading) return;
-    
-    const loadId = ++this._currentLoadId;
+  async refreshLoginState() {
+    const app = getApp()
+    const cachedId = app.globalData.userId || wx.getStorageSync('userId') || ''
+    if (cachedId) {
+      app.globalData.userId = cachedId
+      this.setData({ isLoggedIn: true, userId: cachedId })
+      return true
+    }
+    this.setData({ isLoggedIn: false, userId: '' })
+    return false
+  },
+
+  buildRecordFilter(ids) {
+    const base = {
+      user_id: this.data.userId,
+      grammar_id: _.in(ids)
+    }
+    return base
+  },
+
+  filterByCollection(records, collectionKey = this.data.currentCollection) {
+    return (records || []).filter((item) => {
+      if (item.collection) return item.collection === collectionKey
+      return collectionKey === 'n2_grammar'
+    })
+  },
+
+  async fetchCollectionCount(collectionKey) {
+    const { total } = await db.collection(collectionKey).count()
+    return total
+  },
+
+  async getAllUserRecordsForCollection(collectionKey = this.data.currentCollection) {
+    if (!this.data.userId) return []
+    const countRes = await db.collection(RECORDS_COLLECTION).where({ user_id: this.data.userId }).count()
+    const total = countRes.total || 0
+    if (!total) return []
+    const tasks = []
+    const batchTimes = Math.ceil(total / BATCH_SIZE)
+    for (let i = 0; i < batchTimes; i += 1) {
+      tasks.push(
+        db
+          .collection(RECORDS_COLLECTION)
+          .where({ user_id: this.data.userId })
+          .skip(i * BATCH_SIZE)
+          .limit(BATCH_SIZE)
+          .get()
+      )
+    }
+    const results = await Promise.all(tasks)
+    return this.filterByCollection(results.flatMap((res) => res.data), collectionKey)
+  },
+
+  async getAllFavoritesForCollection(collectionKey = this.data.currentCollection) {
+    if (!this.data.userId) return []
+    const countRes = await db.collection(FAVORITES_COLLECTION).where({ user_id: this.data.userId }).count()
+    const total = countRes.total || 0
+    if (!total) return []
+    const tasks = []
+    const batchTimes = Math.ceil(total / BATCH_SIZE)
+    for (let i = 0; i < batchTimes; i += 1) {
+      tasks.push(
+        db
+          .collection(FAVORITES_COLLECTION)
+          .where({ user_id: this.data.userId })
+          .skip(i * BATCH_SIZE)
+          .limit(BATCH_SIZE)
+          .get()
+      )
+    }
+    const results = await Promise.all(tasks)
+    return this.filterByCollection(results.flatMap((res) => res.data), collectionKey)
+  },
+
+  async loadCollectionMeta() {
+    const [total, records, favorites] = await Promise.all([
+      this.fetchCollectionCount(this.data.currentCollection),
+      this.getAllUserRecordsForCollection(this.data.currentCollection),
+      this.getAllFavoritesForCollection(this.data.currentCollection)
+    ])
+
+    const recordMap = {}
+    let mastered = 0
+    records.forEach((item) => {
+      const grammarId = Number(item.grammar_id)
+      recordMap[grammarId] = item
+      if ((item.proficiency || 0) >= 4) mastered += 1
+    })
+
+    const favoriteMap = {}
+    favorites.forEach((item) => {
+      favoriteMap[Number(item.grammar_id)] = item
+    })
+
     this.setData({
-      loading: true,
-      loadingText: '加载语法点...'
-    });
+      userRecords: recordMap,
+      favoriteMap,
+      stats: {
+        total,
+        learned: records.length,
+        mastered,
+        favorites: favorites.length,
+        percent: total ? ((records.length / total) * 100).toFixed(1) : '0.0'
+      }
+    })
+  },
+
+  async loadGrammarList() {
+    if (this.data.loading) return
+    this.setData({ loading: true, loadingText: '加载语法中...' })
 
     try {
-      let query = db.collection('grammar_points');
-
-      // 搜索条件
+      let query = db.collection(this.data.currentCollection)
       if (this.data.searchText) {
         const regExp = db.RegExp({
           regexp: this.data.searchText,
           options: 'i'
-        });
-        query = query.where(_.or([
-          { grammar_id: regExp },
-          { title: regExp },
-          { meaning: regExp }
-        ]));
+        })
+        query = query.where(
+          _.or([
+            { title: regExp },
+            { meaning: regExp },
+            { note: regExp },
+            { grammar_id: regExp }
+          ])
+        )
       }
 
-      // 排序模式
       if (this.data.mode === 'random') {
-        const countRes = await query.count();
-        const total = countRes.total;
-        if (total === 0) {
-          this.setData({ grammarList: [], loading: false, hasMore: false });
-          return;
+        const countRes = await query.count()
+        const total = countRes.total || 0
+        if (!total) {
+          this.setData({ grammarList: [], hasMore: false, loading: false })
+          return
         }
-
-        const randomIndexes = new Set();
-        while (randomIndexes.size < Math.min(this.data.pageSize, total)) {
-          randomIndexes.add(Math.floor(Math.random() * total));
-        }
-
-        const promises = Array.from(randomIndexes).map(index =>
-          query.skip(index).limit(1).get()
-        );
-
-        const results = await Promise.all(promises);
-        const randomData = results.map(res => res.data[0]).filter(Boolean);
-
+        const need = Math.min(PAGE_SIZE, total)
+        const indexes = new Set()
+        while (indexes.size < need) indexes.add(Math.floor(Math.random() * total))
+        const results = await Promise.all(
+          Array.from(indexes).map((index) => query.skip(index).limit(1).get())
+        )
         this.setData({
-          grammarList: loadId === this._currentLoadId ? randomData : this.data.grammarList,
-          loading: false,
-          hasMore: false
-        });
+          grammarList: results.map((item) => item.data[0]).filter(Boolean),
+          hasMore: false,
+          loading: false
+        })
       } else {
-        // 顺序加载
         const res = await query
           .orderBy('grammar_id', 'asc')
-          .skip((this.data.currentPage - 1) * this.data.pageSize)
-          .limit(this.data.pageSize)
-          .get();
+          .skip((this.data.currentPage - 1) * PAGE_SIZE)
+          .limit(PAGE_SIZE)
+          .get()
 
-        if (loadId === this._currentLoadId) {
-          const newList = this.data.grammarList.concat(res.data);
-          this.setData({
-            grammarList: newList,
-            loading: false,
-            hasMore: res.data.length === this.data.pageSize
-          });
+        const grammarList =
+          this.data.currentPage === 1 ? res.data : this.data.grammarList.concat(res.data)
 
-          // 预加载关联的用户记录
-          this.preloadUserRecords(res.data);
-        }
+        this.setData({
+          grammarList,
+          hasMore: res.data.length === PAGE_SIZE,
+          loading: false
+        })
       }
-    } catch (err) {
-      console.error('加载失败:', err);
-      if (loadId === this._currentLoadId) {
-        this.setData({ loading: false });
-        wx.showToast({
-          title: '加载失败',
-          icon: 'none'
-        });
+
+      if (this._pendingGrammarId) {
+        const pendingId = this._pendingGrammarId
+        this._pendingGrammarId = null
+        await this.showGrammarDetailById(pendingId)
       }
-    } finally {
-      callback && callback();
+    } catch (error) {
+      console.error('loadGrammarList failed', error)
+      this.setData({ loading: false })
+      wx.showToast({ title: '加载失败', icon: 'none' })
     }
   },
 
-  async preloadUserRecords(grammarItems) {
-    if (!grammarItems || !grammarItems.length) return;
-    if (!this.data.isLoggedIn) return;
-
-    const userId = getApp().globalData.userId;
-    const neededIds = [];
-    const cachedRecords = getApp().globalData.userRecordsCache || {};
-
-    // 找出需要加载的记录ID
-    grammarItems.forEach(item => {
-      const grammarId = Number(item.grammar_id);
-      if (!cachedRecords[grammarId]) {
-        neededIds.push(grammarId);
-        this._preloadQueue.add(grammarId);
-      }
-    });
-
-    if (neededIds.length === 0) return;
-
+  async reloadPage() {
     this.setData({
-      loadingText: `加载学习进度 (${neededIds.length}条)`
-    });
-
-    try {
-      // 分批加载
-      const batchCount = Math.ceil(neededIds.length / BATCH_SIZE);
-      let loadedCount = 0;
-
-      for (let i = 0; i < batchCount; i++) {
-        const batchIds = neededIds.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
-        
-        const res = await db.collection('user_study_records')
-          .where({
-            user_id: userId,
-            grammar_id: _.in(batchIds)
-          })
-          .get();
-
-        // 更新缓存
-        const updatedRecords = { ...getApp().globalData.userRecordsCache };
-        res.data.forEach(item => {
-          const grammarId = Number(item.grammar_id);
-          updatedRecords[grammarId] = item;
-          this._preloadQueue.delete(grammarId);
-        });
-
-        getApp().globalData.userRecordsCache = updatedRecords;
-        loadedCount += res.data.length;
-
-        // 更新UI
-        this.setData({
-          userRecords: updatedRecords,
-          loadProgress: Math.round((loadedCount / neededIds.length) * 100)
-        });
-      }
-    } catch (err) {
-      console.error('预加载失败:', err);
-    } finally {
-      if (this._preloadQueue.size === 0) {
-        this.setData({
-          loadingText: '',
-          loadProgress: 0
-        });
-      }
+      grammarList: [],
+      currentPage: 1,
+      hasMore: true,
+      showModal: false,
+      currentGrammar: null
+    })
+    if (this.data.isLoggedIn) {
+      await this.loadCollectionMeta()
+    } else {
+      this.setData({
+        userRecords: {},
+        favoriteMap: {},
+        stats: {
+          total: await this.fetchCollectionCount(this.data.currentCollection),
+          learned: 0,
+          mastered: 0,
+          favorites: 0,
+          percent: '0.0'
+        }
+      })
     }
+    await this.loadGrammarList()
   },
 
   loadMore() {
-    if (!this.data.hasMore || this.data.loading) return;
-    this.setData({
-      currentPage: this.data.currentPage + 1
-    }, this.loadGrammarList);
+    this.setData({ currentPage: this.data.currentPage + 1 }, () => this.loadGrammarList())
   },
 
   switchMode(e) {
-    const mode = e.currentTarget.dataset.mode;
-    if (this.data.mode === mode) return;
-
-    this.setData({
-      mode,
-      grammarList: [],
-      currentPage: 1,
-      hasMore: true
-    }, this.loadGrammarList);
+    const mode = e.currentTarget.dataset.mode
+    if (mode === this.data.mode) return
+    this.setData({ mode, currentPage: 1, grammarList: [], hasMore: true }, async () => {
+      this.saveSettings()
+      await this.loadGrammarList()
+    })
   },
 
   onSearchInput(e) {
-    const text = e.detail.value.trim();
-    this.setData({
-      searchText: text,
-      grammarList: [],
-      currentPage: 1,
-      hasMore: true
-    }, () => {
-      clearTimeout(this._searchTimer);
-      this._searchTimer = setTimeout(() => {
-        this.loadGrammarList();
-      }, 500);
-    });
-  },
-
-  showDetail(e) {
-    const grammarId = Number(e.currentTarget.dataset.id);
-    const grammar = this.data.grammarList.find(
-      item => Number(item.grammar_id) === grammarId
-    );
-    
-    if (!grammar) return;
-
-    const record = this.data.userRecords[grammarId];
-    this.setData({
-      showModal: true,
-      currentGrammar: grammar,
-      currentProficiency: record ? record.proficiency : 0,
-      currentRecordId: record ? record._id : null
-    }, () => {
-      // 显示详情后检查收藏状态
-      if (this.data.isLoggedIn && this.data.userId) {
-        this.checkFavoriteStatus(grammarId);
-      }
-    });
-  },
-  hideDetail() {
-    this.setData({ showModal: false });
-  },
-
-  setProficiency(e) {
-    this.setData({
-      currentProficiency: Number(e.currentTarget.dataset.value)
-    });
-  },
-
-  async updateProficiency() {
-    if (!this.data.currentGrammar || !this.data.isLoggedIn) return;
-
-    const userId = getApp().globalData.userId;
-    const grammarId = Number(this.data.currentGrammar.grammar_id);
-    const proficiency = this.data.currentProficiency;
-
-    wx.showLoading({ title: '保存中...', mask: true });
-
-    try {
-      if (this.data.currentRecordId) {
-        // 更新现有记录
-        await db.collection('user_study_records')
-          .doc(this.data.currentRecordId)
-          .update({
-            data: {
-              proficiency,
-              last_review: db.serverDate(),
-              review_count: _.inc(1),
-              updated_at: db.serverDate()
-            }
-          });
-      } else {
-        // 创建新记录
-        const res = await db.collection('user_study_records')
-          .add({
-            data: {
-              user_id: userId,
-              grammar_id: grammarId,
-              proficiency,
-              study_time: db.serverDate(),
-              last_review: db.serverDate(),
-              review_count: 1,
-              created_at: db.serverDate(),
-              updated_at: db.serverDate()
-            }
-          });
-        this.setData({ currentRecordId: res._id });
-      }
-
-      // 更新本地缓存
-      const updatedRecords = { 
-        ...getApp().globalData.userRecordsCache,
-        [grammarId]: {
-          ...(this.data.userRecords[grammarId] || {}),
-          proficiency,
-          last_review: new Date(),
-          review_count: (this.data.userRecords[grammarId]?.review_count || 0) + 1
-        }
-      };
-      getApp().globalData.userRecordsCache = updatedRecords;
-
-      this.setData({
-        userRecords: updatedRecords,
-        showModal: false
-      });
-      wx.hideLoading();
-      wx.showToast({ title: '保存成功' });
-    } catch (err) {
-      console.error('保存失败:', err);
-      wx.hideLoading();
-      wx.showToast({ title: '保存失败', icon: 'none' });
-    }
+    const searchText = (e.detail.value || '').trim()
+    this.setData({ searchText, currentPage: 1, grammarList: [], hasMore: true })
+    clearTimeout(this._searchTimer)
+    this._searchTimer = setTimeout(() => this.loadGrammarList(), 250)
   },
 
   clearSearch() {
-    if (!this.data.searchText) return;
-    this.setData({
-      searchText: '',
-      grammarList: [],
-      currentPage: 1,
-      hasMore: true
-    }, this.loadGrammarList);
+    this.setData({ searchText: '', currentPage: 1, grammarList: [], hasMore: true }, () =>
+      this.loadGrammarList()
+    )
   },
-// 新增：检查收藏状态
-async checkFavoriteStatus(grammar_id) {
-  if (!this.data.userId || !grammar_id) {
-    this.setData({ isFavorite: false });
-    return;
-  }
-  
-  try {
-    const res = await db.collection('user_favorites')
-      .where({ 
-        user_id: this.data.userId, 
-        grammar_id: grammar_id 
-      })
-      .count();
-      
-    this.setData({ 
-      isFavorite: res.total > 0 
-    });
-  } catch (error) {
-    console.error('检查收藏状态失败:', error);
-    this.setData({ isFavorite: false });
-  }
-},
 
-// 修改：切换收藏状态
-async toggleFavorite() {
-  if (!this.checkLogin()) return; 
+  async switchCollection(e) {
+    const collectionKey = this.normalizeCollection(e.currentTarget.dataset.collection)
+    if (collectionKey === this.data.currentCollection) return
+    this.setCollectionState(collectionKey)
+    this.saveSettings({ collectionKey })
+    await this.reloadPage()
+  },
 
-  if (!this.data.currentGrammar) {
-    return;
-  }
+  toggleMeaning(e) {
+    const showMeaning = !!e.detail.value
+    this.setData({ showMeaning })
+    this.saveSettings({ showMeaning })
+  },
 
-  const grammar_id = this.data.currentGrammar.grammar_id;
-  const userId = this.data.userId;
-  
-  wx.showLoading({ title: '处理中', mask: true });
-  
-  try {
-    // 检查是否已收藏
-    const checkRes = await db.collection('user_favorites')
-      .where({ 
-        user_id: userId, 
-        grammar_id: grammar_id 
-      })
-      .get();
-    
-    if (checkRes.data.length > 0) {
-      // 已收藏 -> 取消收藏
-      await db.collection('user_favorites').doc(checkRes.data[0]._id).remove();
-      this.setData({ isFavorite: false });
-      wx.showToast({ title: '已取消收藏', icon: 'success' });
-    } else {
-      // 未收藏 -> 添加收藏
-      await db.collection('user_favorites').add({
-        data: {
-          user_id: userId,
-          grammar_id: grammar_id,
-          create_time: db.serverDate()
-        }
-      });
-      this.setData({ isFavorite: true });
-      wx.showToast({ title: '已收藏', icon: 'success' });
+  getCurrentRecord(grammarId) {
+    return this.data.userRecords[Number(grammarId)] || null
+  },
+
+  showDetail(e) {
+    const grammarId = Number(e.currentTarget.dataset.id)
+    const grammar = this.data.grammarList.find((item) => Number(item.grammar_id) === grammarId)
+    if (!grammar) return
+    const record = this.getCurrentRecord(grammarId)
+    const favorite = !!this.data.favoriteMap[grammarId]
+    this.setData({
+      showModal: true,
+      currentGrammar: grammar,
+      currentProficiency: record ? record.proficiency || 0 : 0,
+      currentRecordId: record ? record._id || '' : '',
+      isFavorite: favorite
+    })
+  },
+
+  hideDetail() {
+    this.setData({ showModal: false })
+  },
+
+  setProficiency(e) {
+    this.setData({ currentProficiency: Number(e.currentTarget.dataset.value) || 0 })
+  },
+
+  async updateProficiency() {
+    if (!this.data.isLoggedIn || !this.data.currentGrammar) {
+      wx.showToast({ title: '请先登录', icon: 'none' })
+      return
     }
-  } catch (error) {
-    console.error('收藏操作失败:', error);
-    wx.showToast({ title: '操作失败', icon: 'error' });
-  } finally {
-    wx.hideLoading();
-  }
-},
-toggleMeaning(e) {
-  this.setData({
-    showMeaning: e.detail.value
-  });
-},
-// 新增方法：根据ID直接显示语法详情
-async showGrammarDetailById(grammarId) {
-  // 先检查当前列表是否已加载该语法
-  let grammar = this.data.grammarList.find(
-    item => Number(item.grammar_id) === grammarId
-  );
-  
-  // 如果列表中没有，则单独查询
-  if (!grammar) {
+
+    const grammarId = Number(this.data.currentGrammar.grammar_id)
+    const proficiency = this.data.currentProficiency
+    const now = db.serverDate()
+
+    wx.showLoading({ title: '保存中...', mask: true })
     try {
-      const res = await db.collection('grammar_points')
-        .where({ grammar_id: grammarId })
-        .get();
-      
-      if (res.data.length > 0) {
-        grammar = res.data[0];
-        // 添加到当前列表
-        this.setData({
-          grammarList: [...this.data.grammarList, grammar]
-        });
+      let recordId = this.data.currentRecordId
+      if (recordId) {
+        await db
+          .collection(RECORDS_COLLECTION)
+          .doc(recordId)
+          .update({
+            data: {
+              proficiency,
+              last_review: now,
+              review_count: _.inc(1),
+              updated_at: now,
+              collection: this.data.currentCollection
+            }
+          })
+      } else {
+        const res = await db.collection(RECORDS_COLLECTION).add({
+          data: {
+            user_id: this.data.userId,
+            grammar_id: grammarId,
+            collection: this.data.currentCollection,
+            proficiency,
+            review_count: 1,
+            study_time: now,
+            last_review: now,
+            created_at: now,
+            updated_at: now
+          }
+        })
+        recordId = res._id
       }
-    } catch (err) {
-      console.error('查询语法详情失败:', err);
+
+      const existed = !!this.data.userRecords[grammarId]
+      const userRecords = {
+        ...this.data.userRecords,
+        [grammarId]: {
+          ...(this.data.userRecords[grammarId] || {}),
+          _id: recordId,
+          user_id: this.data.userId,
+          grammar_id: grammarId,
+          collection: this.data.currentCollection,
+          proficiency,
+          review_count: (this.data.userRecords[grammarId]?.review_count || 0) + 1,
+          last_review: new Date()
+        }
+      }
+
+      const learned = existed ? this.data.stats.learned : this.data.stats.learned + 1
+      const prevMastered = (this.data.userRecords[grammarId]?.proficiency || 0) >= 4
+      const nextMastered = proficiency >= 4
+      const mastered =
+        this.data.stats.mastered + (prevMastered === nextMastered ? 0 : nextMastered ? 1 : -1)
+
+      this.setData({
+        userRecords,
+        currentRecordId: recordId,
+        showModal: false,
+        stats: {
+          ...this.data.stats,
+          learned,
+          mastered,
+          percent: this.data.stats.total ? ((learned / this.data.stats.total) * 100).toFixed(1) : '0.0'
+        }
+      })
+      wx.showToast({ title: '保存成功' })
+    } catch (error) {
+      console.error('updateProficiency failed', error)
+      wx.showToast({ title: '保存失败', icon: 'none' })
+    } finally {
+      wx.hideLoading()
     }
-  }
-  
-  if (grammar) {
-    this.showDetail({ currentTarget: { dataset: { id: grammarId } } });
-  }
-},
+  },
 
-// 修改分享方法
-onShareAppMessage() {
-  const { currentGrammar, searchText, mode } = this.data;
-  
-  let title = '日语备考通速记 - 高效备考工具';
-  let path = '/pages/grammar/grammar';
-  
-  if (currentGrammar) {
-    title = `[N2语法] ${currentGrammar.title}: ${currentGrammar.meaning.substring(0, 15)}...`;
-    path = `${path}?grammar_id=${currentGrammar.grammar_id}`;
-  } else if (searchText) {
-    title = `我正在学习"${searchText}"相关的N2语法`;
-    path = `${path}?search=${encodeURIComponent(searchText)}`;
-  } else {
-    title = `我正在使用${mode === 'random' ? '随机' : '顺序'}模式学习N2语法`;
-  }
-  
-  return {
-    title,
-    path,
-    imageUrl: '../../images/蓝宝书.png'
-  }
-},
+  async toggleFavorite() {
+    if (!this.data.isLoggedIn || !this.data.currentGrammar) {
+      wx.showToast({ title: '请先登录', icon: 'none' })
+      return
+    }
 
+    const grammarId = Number(this.data.currentGrammar.grammar_id)
+    wx.showLoading({ title: '处理中...', mask: true })
 
+    try {
+      const res = await db
+        .collection(FAVORITES_COLLECTION)
+        .where({
+          user_id: this.data.userId,
+          grammar_id: grammarId
+        })
+        .get()
+      const currentFavorite = this.filterByCollection(res.data).find(
+        (item) => Number(item.grammar_id) === grammarId
+      )
 
- 
+      const favoriteMap = { ...this.data.favoriteMap }
+      let favoritesCount = this.data.stats.favorites
+      if (currentFavorite) {
+        await db.collection(FAVORITES_COLLECTION).doc(currentFavorite._id).remove()
+        delete favoriteMap[grammarId]
+        favoritesCount = Math.max(0, favoritesCount - 1)
+        this.setData({ isFavorite: false })
+        wx.showToast({ title: '已取消收藏', icon: 'success' })
+      } else {
+        const addRes = await db.collection(FAVORITES_COLLECTION).add({
+          data: {
+            user_id: this.data.userId,
+            grammar_id: grammarId,
+            collection: this.data.currentCollection,
+            create_time: db.serverDate()
+          }
+        })
+        favoriteMap[grammarId] = {
+          _id: addRes._id,
+          user_id: this.data.userId,
+          grammar_id: grammarId,
+          collection: this.data.currentCollection
+        }
+        favoritesCount += 1
+        this.setData({ isFavorite: true })
+        wx.showToast({ title: '已收藏', icon: 'success' })
+      }
 
-});
+      this.setData({
+        favoriteMap,
+        stats: {
+          ...this.data.stats,
+          favorites: favoritesCount
+        }
+      })
+    } catch (error) {
+      console.error('toggleFavorite failed', error)
+      wx.showToast({ title: '操作失败', icon: 'none' })
+    } finally {
+      wx.hideLoading()
+    }
+  },
+
+  async showGrammarDetailById(grammarId) {
+    let grammar = this.data.grammarList.find((item) => Number(item.grammar_id) === Number(grammarId))
+    if (!grammar) {
+      try {
+        const res = await db
+          .collection(this.data.currentCollection)
+          .where({ grammar_id: Number(grammarId) })
+          .get()
+        grammar = res.data[0]
+        if (grammar) {
+          this.setData({
+            grammarList: [grammar].concat(this.data.grammarList)
+          })
+        }
+      } catch (error) {
+        console.error('showGrammarDetailById failed', error)
+      }
+    }
+    if (grammar) {
+      this.showDetail({ currentTarget: { dataset: { id: grammar.grammar_id } } })
+    }
+  },
+
+  goToDeepStudy() {
+    wx.navigateTo({
+      url: `/pages/grammar/deepstudy/deepstudy?collection=${this.data.currentCollection}`
+    })
+  },
+
+  goToFavorites() {
+    wx.navigateTo({
+      url: `/pages/grammar/favorites/favorites?collection=${this.data.currentCollection}`
+    })
+  },
+
+  onShareAppMessage() {
+    const currentGrammar = this.data.currentGrammar
+    const collectionLabel = this.data.currentCollectionLabel
+    const title = currentGrammar
+      ? `[${collectionLabel}语法] ${currentGrammar.title}`
+      : `我正在学习 ${collectionLabel} 语法`
+    const path = currentGrammar
+      ? `/pages/grammar/grammar?collection=${this.data.currentCollection}&grammar_id=${currentGrammar.grammar_id}`
+      : `/pages/grammar/grammar?collection=${this.data.currentCollection}`
+    return {
+      title,
+      path
+    }
+  },
+
+  noop() {}
+})

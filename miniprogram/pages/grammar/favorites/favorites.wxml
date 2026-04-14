@@ -1,65 +1,93 @@
-<view class="container fade-in">
+<view class="page">
+  <view class="header-card">
+    <view class="header-top">
+      <view>
+        <view class="badge">语法收藏</view>
+        <view class="title">{{currentCollectionLabel}} 收藏夹</view>
+      </view>
+    </view>
 
-<!-- 搜索框 -->
-<view class="search-bar slide-in">
-  <input style="width: 599rpx; display: block; box-sizing: border-box; height: 74rpx" placeholder="🔍 搜索收藏语法点" bindinput="onSearchInput" value="{{searchText}}" />
-  <button wx:if="{{searchText}}" bindtap="clearSearch" class="clear-btn">✕</button>
-</view>
-<!-- 显示/隐藏意思的开关 -->
-<view style="margin: 20rpx 0;" class="fade-in">
-  <switch checked="{{showMeaning}}" bindchange="toggleMeaning" />
-  <text style="margin-left: 20rpx;">{{showMeaning ? '显示语法意思' : '隐藏语法意思（暗记模式）'}}</text>
-</view>
+    <scroll-view class="collection-strip" scroll-x enhanced show-scrollbar="false">
+      <view class="collection-row">
+        <view
+          wx:for="{{collections}}"
+          wx:key="key"
+          class="collection-pill {{item.key === currentCollection ? 'active' : ''}}"
+          bindtap="switchCollection"
+          data-collection="{{item.key}}"
+        >
+          {{item.label}}
+        </view>
+      </view>
+    </scroll-view>
+  </view>
 
-<!-- 收藏语法列表 -->
-<view class="grammar-list fade-in-delay">
-  <block wx:for="{{favoritesList}}" wx:key="_id">
-    <view class="grammar-item hover-effect" bindtap="showDetail" data-id="{{item.grammar_id}}">
-      <view class="grammar-header">
+  <view class="toolbar">
+    <input
+      class="search-input"
+      placeholder="搜索收藏语法"
+      bindinput="onSearchInput"
+      value="{{searchText}}"
+    />
+    <button wx:if="{{searchText}}" class="clear-btn" bindtap="clearSearch">清空</button>
+  </view>
+
+  <view class="meaning-row">
+    <text>显示释义</text>
+    <switch checked="{{showMeaning}}" bindchange="toggleMeaning" color="#2563eb" />
+  </view>
+
+  <view class="list" wx:if="{{favoritesList.length}}">
+    <view
+      wx:for="{{favoritesList}}"
+      wx:key="grammar_id"
+      class="card"
+      bindtap="showDetail"
+      data-id="{{item.grammar_id}}"
+    >
+      <view class="card-top">
         <text class="grammar-id">#{{item.grammar_id}}</text>
         <text class="grammar-title">{{item.title}}</text>
       </view>
       <view class="grammar-meaning" wx:if="{{showMeaning}}">{{item.meaning}}</view>
-
-    </view>
-  </block>
-</view>
-
-<!-- 加载更多 -->
-<view class="load-more" wx:if="{{hasMore}}">
-  <button bindtap="loadMore" loading="{{loading}}" class="load-btn">加载更多</button>
-</view>
-
-<!-- 语法详情弹窗 -->
-<view class="modal" wx:if="{{showModal}}">
-  <view class="modal-content slide-up">
-    <view class="modal-header">
-      <text class="modal-title">📘 {{currentGrammar.grammar_id}} {{currentGrammar.title}}</text>
-      <button class="close-btn" bindtap="hideDetail">×</button>
-    </view>
-    <view class="modal-body">
-      <view class="grammar-section">
-        <text class="section-title">接续:</text>
-        <text class="section-content">{{currentGrammar.connection}}</text>
-      </view>
-      <view class="grammar-section">
-        <text class="section-title">意思:</text>
-        <text class="section-content">{{currentGrammar.meaning}}</text>
-      </view>
-      <view class="grammar-section">
-        <text class="section-title">例文:</text>
-        <text class="section-content">{{currentGrammar.example}}</text>
-      </view>
-      <view class="grammar-section" wx:if="{{currentGrammar.note}}">
-        <text class="section-title">注意:</text>
-        <text class="section-content">{{currentGrammar.note}}</text>
-      </view>
-      <view class="modal-footer">
-  <button class="unfavorite-btn" bindtap="removeFavorite">取消收藏</button>
-</view>
-
     </view>
   </view>
-</view>
 
+  <view class="empty-card" wx:elif="{{!loading}}">
+    <text class="empty-title">这里还没有收藏</text>
+    <text class="empty-desc">先去语法主页或深度学习页收藏几个常用语法吧。</text>
+  </view>
+
+  <view class="loading-card" wx:if="{{loading}}">加载收藏中...</view>
+
+  <view class="modal-mask" wx:if="{{showModal}}" bindtap="hideDetail">
+    <view class="modal-card" catchtap="noop">
+      <view class="modal-header">
+        <view>
+          <text class="modal-index">#{{currentGrammar.grammar_id}}</text>
+          <text class="modal-title">{{currentGrammar.title}}</text>
+        </view>
+        <button class="close-btn" bindtap="hideDetail">关闭</button>
+      </view>
+
+      <view class="detail-section" wx:if="{{currentGrammar.connection}}">
+        <text class="detail-label">接续</text>
+        <text class="detail-text">{{currentGrammar.connection}}</text>
+      </view>
+      <view class="detail-section">
+        <text class="detail-label">意思</text>
+        <text class="detail-text">{{currentGrammar.meaning}}</text>
+      </view>
+      <view class="detail-section" wx:if="{{currentGrammar.example}}">
+        <text class="detail-label">例句</text>
+        <text class="detail-text">{{currentGrammar.example}}</text>
+      </view>
+      <view class="detail-section" wx:if="{{currentGrammar.note}}">
+        <text class="detail-label">备注</text>
+        <text class="detail-text">{{currentGrammar.note}}</text>
+      </view>
+
+      <button class="remove-btn" bindtap="removeFavorite">取消收藏</button>
+    </view>
+  </view>
 </view>
