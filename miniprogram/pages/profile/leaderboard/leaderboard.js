@@ -1,55 +1,117 @@
+function maskUserId(userId = '') {
+  if (!userId) return '未登录用户'
+  if (userId.length <= 8) return `${userId}***`
+  return `${userId.slice(0, 4)}...${userId.slice(-4)}`
+}
+
+function decorateUser(entry, currentUserId) {
+  if (!entry) return null
+  return {
+    ...entry,
+    rank: Number(entry.rank) || 0,
+    grammarScore: Number(entry.grammarScore) || 0,
+    listeningScore: Number(entry.listeningScore) || 0,
+    wordScore: Number(entry.wordScore) || 0,
+    totalScore: Number(entry.totalScore) || 0,
+    isSelf: entry.userId === currentUserId,
+    displayName: entry.userId === currentUserId ? '我自己' : maskUserId(entry.userId),
+    badgeText: entry.rank === 1 ? '冠军' : entry.rank === 2 ? '亚军' : entry.rank === 3 ? '季军' : ''
+  }
+}
+
 Page({
   data: {
-    leaderboardTop10: [],
-    currentUser: '',
-    currentUserRank: 0 // 当前用户排名
+    loading: true,
+    currentUserId: '',
+    totalUsers: 0,
+    myRank: null,
+    topThree: [],
+    restList: [],
+    aroundMe: []
   },
 
-  onLoad() {
-    const userId = wx.getStorageSync('userId') || '未登录';
-    this.setData({ currentUser: userId });
-    this.loadLeaderboard();
+  async onLoad() {
+    await this.resolveCurrentUser()
+    await this.loadLeaderboard()
   },
 
-  // 获取排行榜前10名
+  async onShow() {
+    const previousUserId = this.data.currentUserId
+    await this.resolveCurrentUser()
+    if (previousUserId !== this.data.currentUserId) {
+      await this.loadLeaderboard()
+    }
+  },
+
+  async onPullDownRefresh() {
+    await this.resolveCurrentUser()
+    await this.loadLeaderboard()
+    wx.stopPullDownRefresh()
+  },
+
+  async resolveCurrentUser() {
+    const app = getApp()
+    let userId = wx.getStorageSync('userId') || ''
+
+    if (!userId && app && typeof app.getUserId === 'function') {
+      try {
+        userId = await app.getUserId()
+      } catch (error) {
+        userId = ''
+      }
+    }
+
+    if (userId) {
+      wx.setStorageSync('userId', userId)
+    }
+
+    this.setData({ currentUserId: userId || '' })
+  },
+
   async loadLeaderboard() {
+    this.setData({ loading: true })
+
     try {
       const res = await wx.cloud.callFunction({
-        name: 'getLeaderboard'
-      });
-      console.log('排行榜原始数据', res.result.leaderboard);
+        name: 'getLeaderboard',
+        data: {
+          limit: 50,
+          currentUserId: this.data.currentUserId
+        }
+      })
 
-      if (res.result.success) {
-        const fullLeaderboard = res.result.leaderboard || [];
-
-        // 标记前10名
-        const top10 = fullLeaderboard.slice(0, 10).map((item, index) => {
-          const study = item.studyTotal || 0;
-          const speaking = item.speakingTotal || 0;
-          const word = item.wordTotal || 0; // ✅ 新增
-          return {
-            ...item,
-            userIdMasked: item.userId ? item.userId.slice(0, 9) + '***' : '***',
-            totalCount: study + speaking + word,
-            studyTotal: study,
-            speakingTotal: speaking,
-            wordTotal: word
-          };
-        });
-
-        // 查找当前用户排名
-        const currentUserIndex = fullLeaderboard.findIndex(item => item.userId === this.data.currentUser);
-        this.setData({
-          leaderboardTop10: top10,
-          currentUserRank: currentUserIndex >= 0 ? currentUserIndex + 1 : 0
-        });
-
-      } else {
-        wx.showToast({ title: '加载排行榜失败', icon: 'none' });
+      if (!res.result || !res.result.success) {
+        throw new Error(res.result?.error || 'load_failed')
       }
-    } catch (err) {
-      console.error('加载排行榜失败', err);
-      wx.showToast({ title: '加载排行榜失败', icon: 'none' });
+
+      const leaderboard = (res.result.leaderboard || []).map(item => decorateUser(item, this.data.currentUserId))
+      const myRank = decorateUser(res.result.currentUser, this.data.currentUserId)
+      const aroundMe = (res.result.aroundMe || [])
+        .map(item => decorateUser(item, this.data.currentUserId))
+        .filter(item => !leaderboard.some(top => top.userId === item.userId))
+
+      this.setData({
+        loading: false,
+        totalUsers: Number(res.result.totalUsers) || 0,
+        myRank,
+        topThree: leaderboard.slice(0, 3),
+        restList: leaderboard.slice(3),
+        aroundMe
+      })
+    } catch (error) {
+      console.error('loadLeaderboard failed', error)
+      this.setData({
+        loading: false,
+        totalUsers: 0,
+        myRank: null,
+        topThree: [],
+        restList: [],
+        aroundMe: []
+      })
+      wx.showToast({
+        title: '加载排行榜失败',
+        icon: 'none'
+      })
     }
   }
-});
+})

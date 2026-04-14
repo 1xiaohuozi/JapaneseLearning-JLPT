@@ -1,38 +1,96 @@
-<view class="container">    
-  <view class="page-title">🏆 学习排行榜</view>
-
-  <block wx:for="{{leaderboardTop10}}" wx:key="_id" wx:for-index="index">
-    <view class="leaderboard-item card {{item.userId === currentUser ? 'highlight' : ''}}">
-      
-      <!-- 排名 -->
-      <view class="rank-container">
-        <text class="rank">{{index + 1}}</text>
-      </view>
-
-      <!-- 用户头像 -->
-      <image class="avatar" src="{{item.avatar || '/images/蓝宝书.png'}}" mode="aspectFill" />
-
-      <!-- 用户信息 -->
-      <view class="user-info">
-        <text class="username">{{item.userIdMasked}}</text>
-        <view class="scores">
-          <text class="score">单词: {{item.wordTotal}}</text>
-  <text class="score"> || 语法: {{item.studyTotal}}</text>
-  <text class="score"> || 听力: {{item.speakingTotal}}</text>
-  <text class="score total">---总数: {{item.totalCount}}</text>
-</view>
-
-      </view>
-
-    </view>
-  </block>
-
-  <view wx:if="{{leaderboardTop10.length === 0}}" class="no-data">
-    暂无排行榜数据
+<view class="leaderboard-page">
+  <view class="hero-panel">
+    <text class="hero-kicker">学习排行榜</text>
+    <text class="hero-title">按真实学习记录自动排名</text>
+    <text class="hero-desc">总分 = 单词学习 + 语法学习 + 听力练习</text>
   </view>
 
-  <!-- 底部固定排名显示 -->
-  <view class="current-rank" wx:if="{{currentUserRank > 0}}">
-    您在本小程序中排行第 {{currentUserRank}} 名
+  <view class="my-panel" wx:if="{{myRank}}">
+    <view class="my-panel-top">
+      <view>
+        <text class="panel-label">我的位置</text>
+        <text class="my-rank-text" wx:if="{{myRank.rank > 0}}">第 {{myRank.rank}} 名 / {{totalUsers}} 人</text>
+        <text class="my-rank-text" wx:else>当前账号还没有进入排行榜</text>
+      </view>
+      <view class="my-total-score">{{myRank.totalScore}}</view>
+    </view>
+    <view class="score-grid">
+      <view class="score-card">
+        <text class="score-name">单词</text>
+        <text class="score-value">{{myRank.wordScore}}</text>
+      </view>
+      <view class="score-card">
+        <text class="score-name">语法</text>
+        <text class="score-value">{{myRank.grammarScore}}</text>
+      </view>
+      <view class="score-card">
+        <text class="score-name">听力</text>
+        <text class="score-value">{{myRank.listeningScore}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section" wx:if="{{topThree.length}}">
+    <text class="section-title">Top 3</text>
+    <view class="top-grid">
+      <block wx:for="{{topThree}}" wx:key="userId">
+        <view class="top-card rank-{{item.rank}} {{item.isSelf ? 'self' : ''}}">
+          <text class="top-rank">#{{item.rank}}</text>
+          <text class="top-badge">{{item.badgeText}}</text>
+          <text class="top-name">{{item.displayName}}</text>
+          <text class="top-score">{{item.totalScore}}</text>
+          <view class="top-tags">
+            <text class="tag">单 {{item.wordScore}}</text>
+            <text class="tag">语 {{item.grammarScore}}</text>
+            <text class="tag">听 {{item.listeningScore}}</text>
+          </view>
+        </view>
+      </block>
+    </view>
+  </view>
+
+  <view class="section" wx:if="{{restList.length}}">
+    <text class="section-title">排行榜</text>
+    <block wx:for="{{restList}}" wx:key="userId">
+      <view class="rank-row {{item.isSelf ? 'self' : ''}}">
+        <view class="rank-index">{{item.rank}}</view>
+        <view class="rank-main">
+          <view class="rank-head">
+            <text class="rank-name">{{item.displayName}}</text>
+            <text class="rank-score">{{item.totalScore}}</text>
+          </view>
+          <view class="rank-meta">
+            <text>单词 {{item.wordScore}}</text>
+            <text>语法 {{item.grammarScore}}</text>
+            <text>听力 {{item.listeningScore}}</text>
+          </view>
+        </view>
+      </view>
+    </block>
+  </view>
+
+  <view class="section" wx:if="{{aroundMe.length}}">
+    <text class="section-title">我的附近</text>
+    <block wx:for="{{aroundMe}}" wx:key="userId">
+      <view class="rank-row {{item.isSelf ? 'self' : ''}}">
+        <view class="rank-index">{{item.rank}}</view>
+        <view class="rank-main">
+          <view class="rank-head">
+            <text class="rank-name">{{item.displayName}}</text>
+            <text class="rank-score">{{item.totalScore}}</text>
+          </view>
+          <view class="rank-meta">
+            <text>单词 {{item.wordScore}}</text>
+            <text>语法 {{item.grammarScore}}</text>
+            <text>听力 {{item.listeningScore}}</text>
+          </view>
+        </view>
+      </view>
+    </block>
+  </view>
+
+  <view class="empty-panel" wx:if="{{!loading && !topThree.length && !restList.length}}">
+    <text class="empty-title">还没有排行榜数据</text>
+    <text class="empty-desc">先去背单词、学语法或练听力，学习记录会自动进入排行榜。</text>
   </view>
 </view>

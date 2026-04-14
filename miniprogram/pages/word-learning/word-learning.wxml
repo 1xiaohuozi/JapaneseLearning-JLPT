@@ -1,175 +1,365 @@
-<view class="container"> 
-  <!-- 背景 -->
-  <view class="bg"></view>
-
-  <!-- 等级选择器 -->
-  <view class="level-picker">
-    <picker mode="selector" range="{{levels}}" value="{{levelIndex}}" bindchange="onLevelChange">
-      <view class="picker-box">
-        <text class="picker-label">当前等级：</text>
-        <text class="picker-value">{{levels[levelIndex]}}</text>
-        <image class="picker-icon" src="/images/arrow-down.png" mode="aspectFit" />
+<view class="page">
+  <view class="study-shell">
+    <view class="topbar">
+      <view class="topbar-left">
+        <view class="brand-mark">
+          <view class="brand-dot"></view>
+        </view>
+        <view class="progress-copy topbar-copy">
+          <text class="progress-main">背词</text>
+          <text class="progress-sub">今天 {{sessionStats.completed}} / {{dashboard.sessionSize}}</text>
+        </view>
       </view>
-    </picker>
-  </view>
-
-  <!-- 顶部 Tab -->
-  <view class="tab-container">
-    <view class="tab-item {{currentTab==='study'?'active':''}}" data-tab="study" bindtap="switchTab">学习</view>
-    <view class="tab-item {{currentTab==='favorites'?'active':''}}" data-tab="favorites" bindtap="switchTab">收藏</view>
-    <view class="tab-item {{currentTab==='all'?'active':''}}" data-tab="all" bindtap="switchTab">单词列表</view>
-  </view>
-
-  <!-- 学习卡片 -->
-  <block wx:if="{{currentTab==='study'}}">
-    <!-- 进度 -->
-    <view class="progress-text">{{currentIndex + 1}} / {{totalWords}}</view>
-    <view class="progress-bar">
-      <view class="progress-fill" style="width: {{(currentIndex+1)/totalWords*100}} + '%'"></view>
-
+      <view class="topbar-right">
+        <button class="drawer-trigger" bindtap="openDrawer">
+        <view class="menu-icon">
+          <view class="menu-line"></view>
+          <view class="menu-line short"></view>
+          <view class="menu-line"></view>
+        </view>
+        <text class="menu-text">菜单</text>
+        </button>
+      </view>
     </view>
 
-    <view class="card-wrapper {{answered ? 'flipped' : ''}}">
-      <!-- 正面 -->
-      <view class="card front">
-        <view class="card-front-content">
-          <text class="word">{{currentWord.word}}</text>
-          <text class="level">级别: {{currentWord.level}}</text>
-          <button wx:if="{{currentWord.sounds && currentWord.sounds.length>0}}" 
-            class="btn-audio" data-src="{{currentWord.sounds[0].fileid}}" bindtap="playAudio">🔊</button>
+    <picker mode="selector" range="{{levels}}" value="{{levelIndex}}" bindchange="onLevelChange">
+      <view class="book-switcher">
+        <view>
+          <text class="book-label">当前词书</text>
+          <text class="book-value">{{levels[levelIndex]}}</text>
+        </view>
+        <view class="book-action">
+          <text class="book-action-text">切换词书</text>
+          <text class="book-arrow">›</text>
+        </view>
+      </view>
+    </picker>
+
+    <view class="book-progress-card">
+      <view class="book-progress-head">
+        <text class="book-progress-title">词书进度</text>
+        <text class="book-progress-value">{{dashboard.learnedWords}} / {{dashboard.totalWords}} · {{dashboard.learnedPercent}}%</text>
+      </view>
+      <view class="progress-track book-progress-track">
+        <view class="progress-fill" style="width: {{dashboard.learnedPercentWidth}};"></view>
+      </view>
+      <text class="book-progress-eta">{{dashboard.finishEtaText}}</text>
+    </view>
+
+    <view class="session-strip">
+      <view class="strip-item">
+        <text class="strip-number">{{queueStats.reviewRemaining}}</text>
+        <text class="strip-label">复习</text>
+      </view>
+      <view class="strip-item">
+        <text class="strip-number">{{queueStats.newRemaining}}</text>
+        <text class="strip-label">新词</text>
+      </view>
+      <view class="strip-item">
+        <text class="strip-number">{{queueStats.dueRemaining}}</text>
+        <text class="strip-label">到期</text>
+      </view>
+      <view class="strip-item">
+        <text class="strip-number">{{sessionStats.again}}</text>
+        <text class="strip-label">回炉</text>
+      </view>
+    </view>
+
+    <view class="progress-track compact">
+      <view class="progress-fill" style="width: {{sessionProgressWidth}};"></view>
+    </view>
+
+    <view wx:if="{{false}}" class="empty-panel">
+      <text class="empty-title">今天这轮已经完成</text>
+      <text class="empty-desc">继续加练可以刷新一轮，或者去抽屉里看词库和收藏。</text>
+      <button class="primary-btn" bindtap="refreshSession">再来一轮</button>
+    </view>
+
+    <view wx:if="{{sessionCompleted}}" class="empty-panel">
+      <text class="empty-title">已完成当天所有任务</text>
+      <text class="empty-desc">今天的复习、新词、到期和回炉任务都已完成。若想继续学习，可以前往菜单里的上限设置提高上限，保存后即可继续背单词。</text>
+      <button class="ghost-btn small completion-link-btn" bindtap="openSettingsPanel">前往上限设置</button>
+    </view>
+
+    <view wx:elif="{{currentWord}}" class="card-stage">
+      <view class="card-stack back-shadow"></view>
+      <view class="card-stack mid-shadow"></view>
+
+      <view class="flip-scene">
+        <view class="flash-overlay {{cardFlashClass}}"></view>
+        <view class="word-card {{cardFlipped ? 'flipped' : ''}}">
+          <view class="card-face card-front">
+            <view class="face-top">
+              <view class="card-meter">
+                <text class="meter-label">熟悉度</text>
+                <text class="meter-value">{{currentWord.proficiency || 0}}</text>
+              </view>
+              <view class="stage-badge-wrap">
+                <view class="stage-badge {{currentWord.sessionType==='new' ? 'stage-new' : 'stage-review'}}">
+                  {{currentWord.sessionType==='new' ? '新词' : '复习'}}
+                </view>
+              </view>
+            </view>
+
+            <view class="front-core">
+              <view class="line-with-icon front-word-row">
+                <text class="front-word">{{currentWord.word}}</text>
+                <image
+                  wx:if="{{currentWord.sounds && currentWord.sounds.length > 0}}"
+                  class="inline-icon large"
+                  src="/images/play.png"
+                  mode="aspectFit"
+                  data-src="{{currentWord.sounds[0].fileid}}"
+                  bindtap="playAudio"
+                />
+              </view>
+              <text class="front-kana">{{currentWord.kana}}</text>
+            </view>
+
+            <view class="front-footer">
+              <text class="front-tip">先想一想，再选择你是否认识</text>
+            </view>
+          </view>
+
+          <view class="card-face card-back">
+            <view class="face-top">
+              <view class="card-meter">
+                <text class="meter-label">熟悉度</text>
+                <text class="meter-value">{{currentWord.proficiency || 0}}</text>
+              </view>
+              <view class="result-badge {{lastRating === 'again' ? 'result-again' : lastRating === 'hard' ? 'result-hard' : 'result-good'}}">
+                {{lastRating === 'again' ? '不认识' : lastRating === 'hard' ? '模糊' : '认识'}}
+              </view>
+            </view>
+
+            <view class="back-content">
+              <view class="word-line">
+                <view class="back-word-row">
+                  <view class="line-with-icon back-word-main">
+                    <text class="back-word">{{currentWord.word}}</text>
+                    <image
+                      wx:if="{{currentWord.sounds && currentWord.sounds.length > 0}}"
+                      class="inline-icon large"
+                      src="/images/play.png"
+                      mode="aspectFit"
+                      data-src="{{currentWord.sounds[0].fileid}}"
+                      bindtap="playAudio"
+                    />
+                  </view>
+                  <view class="favorite-inline" bindtap="toggleFavorite">
+                    <image
+                      class="inline-icon large"
+                      src="{{favMap[currentWord._id] ? '/images/star2.png' : '/images/star1.png'}}"
+                      mode="aspectFit"
+                    />
+                  </view>
+                </view>
+                <text class="back-kana">{{currentWord.kana}}</text>
+              </view>
+
+              <view class="meta-row compact">
+                <text class="meta-chip">{{currentWord.level}}</text>
+                <text class="meta-chip">{{currentWord.pos}}</text>
+                <text class="meta-chip">声调 {{currentWord.accent}}</text>
+              </view>
+
+              <view class="meaning-card compact">
+                <text class="meaning-label">词义</text>
+                <text class="meaning-value">{{currentWord.meaning}}</text>
+              </view>
+
+              <view class="example-card compact">
+                <view class="line-with-icon">
+                  <text class="example-jp">{{currentWord.example_jp}}</text>
+                  <image
+                    wx:if="{{currentWord.sounds && currentWord.sounds.length > 1}}"
+                    class="inline-icon"
+                    src="/images/play.png"
+                    mode="aspectFit"
+                    data-src="{{currentWord.sounds[1].fileid}}"
+                    bindtap="playAudio"
+                  />
+                </view>
+                <rich-text wx:if="{{currentWord.example_jp_furigana}}" class="example-furi" nodes="{{currentWord.example_jp_furigana}}"></rich-text>
+                <text class="example-zh">{{currentWord.example_zh_cn}}</text>
+              </view>
+
+              <view class="back-toolbar">
+                <view class="toolbar-item word-sound-item">
+                  <text class="toolbar-label">单词发音</text>
+                  <image
+                    wx:if="{{currentWord.sounds && currentWord.sounds.length > 0}}"
+                    class="inline-icon large"
+                    src="/images/play.png"
+                    mode="aspectFit"
+                    data-src="{{currentWord.sounds[0].fileid}}"
+                    bindtap="playAudio"
+                  />
+                </view>
+                <view class="toolbar-item favorite-item" bindtap="toggleFavorite">
+                  <text class="toolbar-label">{{favMap[currentWord._id] ? '已收藏' : '收藏'}}</text>
+                  <image
+                    class="inline-icon large"
+                    src="{{favMap[currentWord._id] ? '/images/star2.png' : '/images/star1.png'}}"
+                    mode="aspectFit"
+                  />
+                </view>
+              </view>
+            </view>
+          </view>
         </view>
       </view>
 
-   <!-- 背面 -->
-<view class="card back">
-  <scroll-view scroll-y="true" class="card-scroll">
-    <!-- 收藏按钮悬浮 -->
-    <view class="favorite-btn-wrapper">
-      <button class="btn-favorite" bindtap="toggleFavorite">
-        {{isFavorited ? "★" : "☆"}}
-      </button>
-    </view>
-
-    <!-- 单词 + 假名 -->
-    <view class="word-header">
-      <text class="word-main">{{currentWord.word}}</text>
-      <text class="word-kana">（{{currentWord.kana}}）</text>
-    </view>
-    <button wx:if="{{currentWord.sounds && currentWord.sounds.length>0}}" 
-            class="btn-audio2" data-src="{{currentWord.sounds[0].fileid}}" bindtap="playAudio">🔊</button>
-    <!-- 词性 + 声调 -->
-    <view class="word-meta">
-      <text class="meta-tag">{{currentWord.pos}}</text>
-      <text class="meta-tag">声调: {{currentWord.accent}}</text>
-    </view>
-
-    <!-- 释义 -->
-    <view class="meaning-block">
-      <text class="meaning">{{currentWord.meaning}}</text>
-    </view>
-
-    <!-- 例句 -->
-    <view class="example-block">
-      <text class="example-jp">📖 {{currentWord.example_jp}}</text>
-      <rich-text class="example-furi" nodes="{{currentWord.example_jp_furigana}}"></rich-text>
-      <text class="example-zh">👉 {{currentWord.example_zh_cn}}</text>
-      <button wx:if="{{currentWord.sounds && currentWord.sounds.length>1}}"  
-        class="btn-audio-example" 
-        data-src="{{currentWord.sounds[1].fileid}}" 
-        bindtap="playAudio">
-  🔊 <text class="btn-text">例句朗读</text>
-</button>
-
-    </view>
-  </scroll-view>
-</view>
-
-    </view>
-
-    <!-- 操作按钮 -->
-    <view class="btn-group">
-      <block wx:if="{{!answered}}">
-        <button class="btn btn-right" bindtap="chooseKnown" disabled="{{btnDisabled}}">认识</button>
-        <button class="btn btn-wrong" bindtap="chooseUnknown" disabled="{{btnDisabled}}">不认识</button>
-      </block>
-      <block wx:elif="{{answered}}">
-        <button class="btn btn-next" bindtap="nextWord">下一个 ➡️</button>
-      </block>
-    </view>
-  </block>
-
-  <!-- 收藏 -->
-  <block wx:elif="{{currentTab==='favorites'}}">
-    <scroll-view scroll-y="true" style="height: 80vh;" bindscrolltolower="loadMoreFavorites">
-      <view wx:for="{{favoriteWords}}" wx:key="_id" class="list-item" data-id="{{item._id}}" bindtap="viewWordDetail">
-        <text>{{item.word}} ({{item.level}})</text>
+      <view class="action-row major" wx:if="{{!answered}}">
+        <button class="rating-btn again" data-rating="again" bindtap="handleRating">不认识</button>
+        <button class="rating-btn hard" data-rating="hard" bindtap="handleRating">模糊</button>
+        <button class="rating-btn good" data-rating="good" bindtap="handleRating">认识</button>
       </view>
-      <view class="loading" wx:if="{{loadingFavorites}}">⏳ 正在加载收藏...</view>
-      <view class="no-more" wx:if="{{!hasMoreFavorites}}">没有更多了</view>
-    </scroll-view>
-  </block>
 
-  <!-- 单词列表 -->
-  <block wx:elif="{{currentTab==='all'}}">
-    <view class="search-box">
-      <input type="text"
-             placeholder="🔍 搜索单词或假名..."
-             value="{{searchQuery}}"
-             bindinput="onSearchInput"/>
-    </view>
-    <scroll-view scroll-y="true" style="height: 75vh;" bindscrolltolower="loadMoreWords">
-      <view wx:for="{{filteredWords}}" wx:key="_id"
-            class="list-item"
-            data-id="{{item._id}}"
-            bindtap="viewWordDetail">
-        <text>{{item.word}} 【{{item.kana}}】</text>
-        <text class="list-meaning">{{item.meaning}}</text>
+      <view class="action-row" wx:elif="{{answered}}">
+        <button class="primary-btn" bindtap="nextCard">下一张</button>
       </view>
-      <view class="loading" wx:if="{{loadingWords}}">⏳ 正在加载单词...</view>
-      <view class="no-more" wx:if="{{!hasMoreWords}}">没有更多了</view>
-    </scroll-view>
-  </block>
-  <!-- 单词详情弹窗 -->
-<view wx:if="{{showDetail}}" class="detail-modal">
-  <view class="detail-box">
-    <!-- 关闭按钮 -->
-    <button class="detail-close" bindtap="closeDetail">✖</button>
-
-    <!-- 单词 + 假名 -->
-    <view class="detail-header">
-      <text class="detail-word">{{detailWord.word}}</text>
-      <text class="detail-kana">（{{detailWord.kana}}）</text>
-      <button wx:if="{{detailWord.sounds && detailWord.sounds.length>0}}" 
-              class="btn-audio" 
-              data-src="{{detailWord.sounds[0].fileid}}" 
-              bindtap="playAudio">🔊</button>
-    </view>
-
-    <!-- 词性 + 声调 -->
-    <view class="detail-meta">
-      <text class="meta">{{detailWord.pos}}</text>
-      <text class="meta">声调: {{detailWord.accent}}</text>
-    </view>
-
-    <!-- 中文释义 -->
-    <view class="detail-meaning">
-      <text>{{detailWord.meaning}}</text>
-    </view>
-
-    <!-- 例句 -->
-    <view class="detail-example">
-      <text class="jp">📖 {{detailWord.example_jp}}</text>
-      <text class="zh">👉 {{detailWord.example_zh_cn}}</text>
-
-      <!-- 例句朗读按钮 -->
-      <button wx:if="{{detailWord.sounds && detailWord.sounds.length>1}}"  
-              class="btn-audio-example" 
-              data-src="{{detailWord.sounds[1].fileid}}" 
-              bindtap="playAudio">
-        🔊 例句朗读
-      </button>
     </view>
   </view>
-</view>
 
+  <view wx:if="{{drawerOpen}}" class="drawer-mask" bindtap="closeDrawer">
+    <view class="drawer-panel" catchtap="noop">
+      <view class="drawer-head">
+        <text class="drawer-title">学习面板</text>
+        <button class="close-btn" bindtap="closeDrawer">关闭</button>
+      </view>
+
+      <view class="drawer-nav">
+        <view class="drawer-tab {{drawerSection==='overview' ? 'active' : ''}}" data-section="overview" bindtap="switchDrawerSection">概览</view>
+        <view class="drawer-tab {{drawerSection==='library' ? 'active' : ''}}" data-section="library" bindtap="switchDrawerSection">词库</view>
+        <view class="drawer-tab {{drawerSection==='favorites' ? 'active' : ''}}" data-section="favorites" bindtap="switchDrawerSection">收藏</view>
+        <view class="drawer-tab {{drawerSection==='settings' ? 'active' : ''}}" data-section="settings" bindtap="switchDrawerSection">设置</view>
+      </view>
+
+      <scroll-view scroll-y="true" class="drawer-scroll" bindscrolltolower="handleDrawerScrollToLower" lower-threshold="80">
+        <view wx:if="{{drawerSection==='overview'}}">
+          <view class="stats-grid single-column">
+            <view class="stat-card">
+              <text class="stat-label">今天计划</text>
+              <text class="stat-value">{{dashboard.sessionSize}}</text>
+              <text class="stat-sub">{{dashboard.reviewPlanned}} 复习 / {{dashboard.newPlanned}} 新词</text>
+            </view>
+            <view class="stat-card">
+              <text class="stat-label">已学过</text>
+              <text class="stat-value">{{dashboard.learnedWords}}</text>
+              <text class="stat-sub">累计进入复习系统</text>
+            </view>
+            <view class="stat-card">
+              <text class="stat-label">已掌握</text>
+              <text class="stat-value">{{dashboard.masteredCount}}</text>
+              <text class="stat-sub">熟练度 5+</text>
+            </view>
+            <view class="stat-card">
+              <text class="stat-label">本轮反馈</text>
+              <text class="stat-sub">不认识 {{sessionStats.again}} / 模糊 {{sessionStats.hard}} / 认识 {{sessionStats.good}}</text>
+            </view>
+          </view>
+          <button class="primary-btn" bindtap="refreshSession" loading="{{sessionLoading}}">重新生成今日任务</button>
+        </view>
+
+        <view wx:elif="{{drawerSection==='settings'}}" class="settings-panel inline-panel">
+          <view class="settings-row">
+            <text class="settings-label">每日新词上限</text>
+            <slider min="10" max="200" step="10" value="{{settings.newLimit}}" activeColor="#2563eb" bindchange="onNewLimitChange" />
+            <text class="settings-value">{{settings.newLimit}}</text>
+          </view>
+          <view class="settings-row">
+            <text class="settings-label">单次复习上限</text>
+            <slider min="20" max="300" step="10" value="{{settings.reviewLimit}}" activeColor="#2563eb" bindchange="onReviewLimitChange" />
+            <text class="settings-value">{{settings.reviewLimit}}</text>
+          </view>
+          <button class="primary-btn" bindtap="applySettings">保存设置</button>
+        </view>
+
+        <view wx:elif="{{drawerSection==='library'}}" class="library-panel inline-panel">
+          <input class="search-input" placeholder="搜索单词、假名或释义" value="{{searchQuery}}" bindinput="onSearchInput" />
+          <view class="filter-row">
+            <view class="filter-chip {{libraryFilter==='all' ? 'active' : ''}}" data-filter="all" bindtap="setLibraryFilter">全部</view>
+            <view class="filter-chip {{libraryFilter==='new' ? 'active' : ''}}" data-filter="new" bindtap="setLibraryFilter">新词</view>
+            <view class="filter-chip {{libraryFilter==='learning' ? 'active' : ''}}" data-filter="learning" bindtap="setLibraryFilter">学习中</view>
+            <view class="filter-chip {{libraryFilter==='due' ? 'active' : ''}}" data-filter="due" bindtap="setLibraryFilter">待复习</view>
+            <view class="filter-chip {{libraryFilter==='mastered' ? 'active' : ''}}" data-filter="mastered" bindtap="setLibraryFilter">已掌握</view>
+          </view>
+          <view wx:for="{{filteredLibraryWords}}" wx:key="_id" class="word-list-item" data-id="{{item._id}}" bindtap="viewWordDetail">
+            <view class="item-main">
+              <text class="item-word">{{item.word}}</text>
+              <text class="item-kana">{{item.kana}}</text>
+            </view>
+            <view class="item-side">
+              <text class="item-stage">{{item.stageLabel}}</text>
+              <text class="item-prof">熟练度 {{item.proficiency || 0}}</text>
+            </view>
+            <text class="item-meaning">{{item.meaning}}</text>
+          </view>
+          <view wx:if="{{loadingLibrary}}" class="loading-tip">正在加载更多单词...</view>
+          <view wx:if="{{!hasMoreLibrary && filteredLibraryWords.length}}" class="loading-tip">当前词书已经加载到底</view>
+        </view>
+
+        <view wx:elif="{{drawerSection==='favorites'}}" class="library-panel inline-panel">
+          <view wx:if="{{!isLoggedIn}}" class="empty-panel compact">
+            <text class="empty-title">登录后查看收藏</text>
+            <text class="empty-desc">收藏和学习记录会跟账号同步。</text>
+          </view>
+          <block wx:else>
+            <view wx:for="{{favoriteWords}}" wx:key="_id" class="word-list-item" data-id="{{item._id}}" bindtap="viewWordDetail">
+              <view class="item-main">
+                <text class="item-word">{{item.word}}</text>
+                <text class="item-kana">{{item.kana}}</text>
+              </view>
+              <view class="item-side">
+                <text class="item-stage">{{item.stageLabel}}</text>
+                <text class="item-prof">熟练度 {{item.proficiency || 0}}</text>
+              </view>
+              <text class="item-meaning">{{item.meaning}}</text>
+            </view>
+            <view wx:if="{{loadingFavorites}}" class="loading-tip">正在加载更多收藏...</view>
+            <view wx:if="{{!hasMoreFavorites && favoriteWords.length}}" class="loading-tip">收藏已经全部加载完成</view>
+            <view wx:if="{{!loadingFavorites && !favoriteWords.length}}" class="empty-panel compact">
+              <text class="empty-title">还没有收藏单词</text>
+              <text class="empty-desc">在卡片页点收藏，常错词会更容易回看。</text>
+            </view>
+          </block>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <view wx:if="{{showDetail && detailWord}}" class="detail-mask" bindtap="closeDetail">
+    <view class="detail-panel" catchtap="noop">
+      <view class="detail-header">
+        <view>
+          <text class="detail-word">{{detailWord.word}}</text>
+          <text class="detail-kana">{{detailWord.kana}}</text>
+        </view>
+        <button class="close-btn" bindtap="closeDetail">关闭</button>
+      </view>
+
+      <view class="meta-row compact">
+        <text class="meta-chip">{{detailWord.level}}</text>
+        <text class="meta-chip">{{detailWord.pos}}</text>
+        <text class="meta-chip">声调 {{detailWord.accent}}</text>
+        <text class="meta-chip">{{detailWord.stageLabel || '学习中'}}</text>
+      </view>
+
+      <view class="meaning-card compact">
+        <text class="meaning-label">词义</text>
+        <text class="meaning-value">{{detailWord.meaning}}</text>
+      </view>
+
+      <view class="example-card compact">
+        <text class="example-jp">{{detailWord.example_jp}}</text>
+        <text class="example-zh">{{detailWord.example_zh_cn}}</text>
+      </view>
+
+      <view class="detail-actions">
+        <button class="ghost-btn" bindtap="toggleFavorite">{{favMap[detailWord._id] ? '取消收藏' : '收藏'}}</button>
+        <button class="primary-btn" bindtap="startLearningThisWord">加入当前学习</button>
+      </view>
+    </view>
+  </view>
 </view>
