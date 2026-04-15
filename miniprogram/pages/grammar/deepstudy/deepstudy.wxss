@@ -34,7 +34,8 @@
 .hero-card,
 .study-card,
 .complete-card,
-.loading-card {
+.loading-card,
+.detail-sheet {
   background: rgba(255, 255, 255, 0.94);
   border: 1rpx solid rgba(148, 163, 184, 0.16);
   box-shadow: 0 20rpx 48rpx rgba(15, 23, 42, 0.08);
@@ -195,10 +196,20 @@
   color: #64748b;
 }
 
+.study-stage {
+  margin-top: 28rpx;
+}
+
 .answer-row {
   display: flex;
   gap: 14rpx;
-  margin-top: 28rpx;
+  transition: opacity 180ms ease, transform 220ms ease;
+}
+
+.answer-row-hidden {
+  opacity: 0.16;
+  transform: scale(0.98);
+  pointer-events: none;
 }
 
 .unknown-btn,
@@ -215,8 +226,69 @@
   background: linear-gradient(135deg, #2563eb, #1d4ed8);
 }
 
-.detail-stack {
-  margin-top: 24rpx;
+.answer-hint {
+  margin-top: 16rpx;
+  padding: 18rpx 20rpx;
+  border-radius: 20rpx;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 22rpx;
+  line-height: 1.6;
+}
+
+.detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+}
+
+.detail-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(10rpx);
+}
+
+.detail-sheet {
+  position: relative;
+  width: 100%;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 18rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
+  animation: detail-sheet-rise 220ms ease;
+}
+
+.detail-sheet-handle {
+  width: 88rpx;
+  height: 8rpx;
+  border-radius: 999rpx;
+  background: #cbd5e1;
+  margin: 0 auto 18rpx;
+}
+
+.detail-sheet-head {
+  text-align: center;
+}
+
+.detail-sheet-title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #10213a;
+}
+
+.detail-sheet-subtitle {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #64748b;
+}
+
+.detail-scroll {
+  max-height: 56vh;
+  margin-top: 20rpx;
+  padding-bottom: 8rpx;
 }
 
 .detail-box {
@@ -224,13 +296,14 @@
   padding: 22rpx;
   border-radius: 24rpx;
   background: #f8fbff;
+  box-shadow: 0 10rpx 24rpx rgba(15, 23, 42, 0.05);
 }
 
 .detail-label {
   display: block;
+  margin-bottom: 10rpx;
   font-size: 22rpx;
   color: #64748b;
-  margin-bottom: 10rpx;
 }
 
 .detail-text {
@@ -240,10 +313,13 @@
   white-space: pre-wrap;
 }
 
+.detail-footer {
+  padding-top: 18rpx;
+}
+
 .next-btn,
 .reset-btn {
   width: 100%;
-  margin-top: 22rpx;
   color: #fff;
 }
 
@@ -252,6 +328,7 @@
 }
 
 .reset-btn {
+  margin-top: 22rpx;
   background: linear-gradient(135deg, #f97316, #ea580c);
 }
 
@@ -276,4 +353,15 @@
   text-align: center;
   font-size: 26rpx;
   color: #475569;
+}
+
+@keyframes detail-sheet-rise {
+  from {
+    opacity: 0;
+    transform: translateY(40rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

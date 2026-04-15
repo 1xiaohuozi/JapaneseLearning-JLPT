@@ -18,6 +18,9 @@ const DEFAULT_SESSION_STATS = {
   reviewDone: 0
 }
 
+const CLOUD_PROGRESS_DEBOUNCE_MS = 12000
+const RECORD_SYNC_DEBOUNCE_MS = 10000
+
 Page({
   data: {
     currentTab: 'study',
@@ -106,11 +109,14 @@ Page({
   },
 
   onHide() {
-    this.persistSessionSnapshot()
+    this.persistSessionSnapshot({ immediateCloud: true })
+    this.flushPendingWordRecords()
   },
 
   onUnload() {
-    this.persistSessionSnapshot()
+    this.persistSessionSnapshot({ immediateCloud: true })
+    this.flushPendingCloudProgress()
+    this.flushPendingWordRecords()
   },
 
   getUserId() {
@@ -145,6 +151,11 @@ Page({
   getSessionCacheKey() {
     const userKey = this.getUserId() || 'guest'
     return `word_session_${userKey}_${this.getCurrentCollection()}`
+  },
+
+  getPendingRecordCacheKey() {
+    const userKey = this.getUserId() || 'guest'
+    return `word_pending_records_${userKey}_${this.getCurrentCollection()}`
   },
 
   getTodayKey() {
@@ -212,6 +223,11 @@ Page({
         levelIndex: mergedLevelIndex,
         settings: mergedSettings
       })
+      this.markProfileSynced({
+        collection: this.data.collectionMap[this.data.levels[mergedLevelIndex]],
+        newLimit: mergedSettings.newLimit,
+        reviewLimit: mergedSettings.reviewLimit
+      })
       this.persistLocalSettings()
     } catch (error) {
       console.error('loadSettings failed', error)
@@ -225,21 +241,38 @@ Page({
     })
   },
 
-  async saveSettings() {
+  getProfilePayload() {
+    return {
+      collection: this.getCurrentCollection(),
+      newLimit: Number(this.data.settings.newLimit) || DEFAULT_SETTINGS.newLimit,
+      reviewLimit: Number(this.data.settings.reviewLimit) || DEFAULT_SETTINGS.reviewLimit
+    }
+  },
+
+  getProfileSyncKey(payload = this.getProfilePayload()) {
+    return JSON.stringify(payload)
+  },
+
+  markProfileSynced(payload = this.getProfilePayload()) {
+    this._profileSyncKey = this.getProfileSyncKey(payload)
+  },
+
+  async saveSettings(options = {}) {
     this.persistLocalSettings()
 
     const userId = this.getUserId()
     if (!userId) return
 
+    const payload = this.getProfilePayload()
+    const nextSyncKey = this.getProfileSyncKey(payload)
+    if (!options.force && nextSyncKey === this._profileSyncKey) return
+
     try {
       await this.callWordService('saveUserProfile', {
         userId,
-        payload: {
-          collection: this.getCurrentCollection(),
-          newLimit: this.data.settings.newLimit,
-          reviewLimit: this.data.settings.reviewLimit
-        }
+        payload
       })
+      this.markProfileSynced(payload)
     } catch (error) {
       console.error('saveSettings failed', error)
     }
@@ -264,6 +297,21 @@ Page({
     ])
   },
 
+  loadPendingRecordQueue() {
+    const queue = wx.getStorageSync(this.getPendingRecordCacheKey())
+    this._pendingRecordQueue = Array.isArray(queue) ? queue : []
+    return this._pendingRecordQueue
+  },
+
+  persistPendingRecordQueue() {
+    const queue = Array.isArray(this._pendingRecordQueue) ? this._pendingRecordQueue : []
+    if (!queue.length) {
+      wx.removeStorageSync(this.getPendingRecordCacheKey())
+      return
+    }
+    wx.setStorageSync(this.getPendingRecordCacheKey(), queue)
+  },
+
   async callWordService(action, payload = {}) {
     const res = await wx.cloud.callFunction({
       name: 'lafService',
@@ -284,6 +332,7 @@ Page({
     const userId = this.getUserId()
 
     try {
+      await this.flushPendingWordRecords()
       const result = await this.callWordService('buildSession', {
         userId,
         collection,
@@ -430,7 +479,92 @@ Page({
     }
 
     wx.setStorageSync(this.getSessionCacheKey(), payload)
-    return this.persistCloudProgress(payload)
+    if (overrides.immediateCloud) {
+      return this.persistCloudProgress(payload)
+    }
+    this.scheduleCloudProgressSync(payload)
+    return Promise.resolve()
+  },
+
+  scheduleCloudProgressSync(payload) {
+    this._pendingCloudProgress = payload
+    if (this._progressSyncTimer) return
+
+    this._progressSyncTimer = setTimeout(() => {
+      this._progressSyncTimer = null
+      const nextPayload = this._pendingCloudProgress
+      this._pendingCloudProgress = null
+      if (nextPayload) {
+        this.persistCloudProgress(nextPayload)
+      }
+    }, CLOUD_PROGRESS_DEBOUNCE_MS)
+  },
+
+  flushPendingCloudProgress() {
+    if (this._progressSyncTimer) {
+      clearTimeout(this._progressSyncTimer)
+      this._progressSyncTimer = null
+    }
+
+    const payload = this._pendingCloudProgress
+    this._pendingCloudProgress = null
+    if (payload) {
+      return this.persistCloudProgress(payload)
+    }
+    return Promise.resolve()
+  },
+
+  enqueuePendingWordRecord(payload) {
+    this.loadPendingRecordQueue()
+    this._pendingRecordQueue.push({
+      ...payload,
+      queuedAt: Date.now()
+    })
+    this.persistPendingRecordQueue()
+    this.schedulePendingWordRecordFlush()
+  },
+
+  schedulePendingWordRecordFlush() {
+    if (this._recordSyncTimer) return
+
+    this._recordSyncTimer = setTimeout(() => {
+      this._recordSyncTimer = null
+      this.flushPendingWordRecords()
+    }, RECORD_SYNC_DEBOUNCE_MS)
+  },
+
+  async flushPendingWordRecords() {
+    const userId = this.getUserId()
+    if (!userId) return
+
+    this.loadPendingRecordQueue()
+    if (!this._pendingRecordQueue.length) return
+
+    if (this._recordSyncTimer) {
+      clearTimeout(this._recordSyncTimer)
+      this._recordSyncTimer = null
+    }
+
+    const queue = this._pendingRecordQueue.slice()
+    this._pendingRecordQueue = []
+    this.persistPendingRecordQueue()
+
+    try {
+      await this.callWordService('batchUpdateRecords', {
+        userId,
+        collection: this.getCurrentCollection(),
+        records: queue.map(item => ({
+          word_id: item.word_id,
+          rating: item.rating,
+          word_order: item.word_order || 0,
+          session_type: item.session_type || ''
+        }))
+      })
+    } catch (error) {
+      this._pendingRecordQueue = queue.concat(this._pendingRecordQueue || [])
+      this.persistPendingRecordQueue()
+      console.error('flushPendingWordRecords failed', error)
+    }
   },
 
   async persistCloudProgress(payload) {
@@ -453,6 +587,18 @@ Page({
   },
 
   async clearPersistedSessionSnapshot() {
+    if (this._recordSyncTimer) {
+      clearTimeout(this._recordSyncTimer)
+      this._recordSyncTimer = null
+    }
+    this._pendingRecordQueue = []
+    wx.removeStorageSync(this.getPendingRecordCacheKey())
+
+    if (this._progressSyncTimer) {
+      clearTimeout(this._progressSyncTimer)
+      this._progressSyncTimer = null
+    }
+    this._pendingCloudProgress = null
     wx.removeStorageSync(this.getSessionCacheKey())
 
     const userId = this.getUserId()
@@ -502,7 +648,6 @@ Page({
       libraryPage: 0,
       hasMoreLibrary: true
     })
-    await this.loadMoreLibrary()
   },
 
   async loadMoreLibrary() {
@@ -535,17 +680,18 @@ Page({
     }
   },
 
-  async attachWordMeta(words) {
+  async attachWordMeta(words, options = {}) {
     if (!words.length) return []
 
     const userId = this.getUserId()
     const collection = this.getCurrentCollection()
+    const forceFavorited = !!options.forceFavorited
     if (!userId) {
       return words.map(word => ({
         ...word,
         proficiency: this.data.profMap[word._id] || 0,
         hasRecord: !!this.data.learnedMap[word._id],
-        isFavorited: !!this.data.favMap[word._id],
+        isFavorited: forceFavorited || !!this.data.favMap[word._id],
         stage: this.getWordStage({
           proficiency: this.data.profMap[word._id] || 0,
           nextReview: null
@@ -557,12 +703,24 @@ Page({
       }))
     }
 
-    const ids = words.map(word => word._id)
-    const idChunks = this.chunkList(ids)
+    const favMap = { ...this.data.favMap }
+    const profMap = { ...this.data.profMap }
+    const learnedMap = { ...this.data.learnedMap }
+    const nextMap = {}
 
-    const [favPages, profPages] = await Promise.all([
-      Promise.all(
-        idChunks.map(chunk =>
+    const missingRecordIds = words
+      .map(word => word._id)
+      .filter(id => !Object.prototype.hasOwnProperty.call(profMap, id) && !Object.prototype.hasOwnProperty.call(learnedMap, id))
+
+    const missingFavoriteIds = forceFavorited
+      ? []
+      : words
+        .map(word => word._id)
+        .filter(id => !Object.prototype.hasOwnProperty.call(favMap, id))
+
+    if (missingFavoriteIds.length) {
+      const favPages = await Promise.all(
+        this.chunkList(missingFavoriteIds).map(chunk =>
           db.collection('user_word_favorites')
             .where({
               user_id: userId,
@@ -572,51 +730,66 @@ Page({
             .field({ word_id: true })
             .get()
         )
-      ),
-      Promise.all(
-        idChunks.map(chunk =>
+      )
+
+      missingFavoriteIds.forEach(id => {
+        if (!Object.prototype.hasOwnProperty.call(favMap, id)) {
+          favMap[id] = false
+        }
+      })
+
+      favPages.flatMap(res => res.data || []).forEach(item => {
+        favMap[item.word_id] = true
+      })
+    }
+
+    if (missingRecordIds.length) {
+      const profPages = await Promise.all(
+        this.chunkList(missingRecordIds).map(chunk =>
           db.collection('user_word_records')
             .where({
               user_id: userId,
               collection,
               word_id: _.in(chunk)
             })
-            .field({ word_id: true, proficiency: true, nextReview: true })
+            .field({ word_id: true, proficiency: true, nextReview: true, stability: true })
             .get()
         )
       )
-    ])
 
-    const favMap = { ...this.data.favMap }
-    const profMap = { ...this.data.profMap }
-    const learnedMap = { ...this.data.learnedMap }
-    const nextMap = {}
+      missingRecordIds.forEach(id => {
+        if (!Object.prototype.hasOwnProperty.call(profMap, id)) profMap[id] = 0
+        if (!Object.prototype.hasOwnProperty.call(learnedMap, id)) learnedMap[id] = false
+      })
 
-    favPages.flatMap(res => res.data || []).forEach(item => {
-      favMap[item.word_id] = true
-    })
-
-    profPages.flatMap(res => res.data || []).forEach(item => {
-      profMap[item.word_id] = item.proficiency || 0
-      nextMap[item.word_id] = item.nextReview || null
-      learnedMap[item.word_id] = true
-    })
+      profPages.flatMap(res => res.data || []).forEach(item => {
+        profMap[item.word_id] = item.proficiency || 0
+        nextMap[item.word_id] = item.nextReview || null
+        learnedMap[item.word_id] = true
+      })
+    }
 
     this.setData({ favMap, profMap, learnedMap })
 
     return words.map(word => ({
       ...word,
       proficiency: profMap[word._id] || 0,
-      nextReview: nextMap[word._id] || null,
+      nextReview: Object.prototype.hasOwnProperty.call(nextMap, word._id)
+        ? nextMap[word._id]
+        : (word.nextReview || null),
       hasRecord: !!learnedMap[word._id],
-      isFavorited: !!favMap[word._id],
+      isFavorited: forceFavorited || !!favMap[word._id],
       stage: this.getWordStage({
         proficiency: profMap[word._id] || 0,
-        nextReview: nextMap[word._id] || null
+        nextReview: Object.prototype.hasOwnProperty.call(nextMap, word._id)
+          ? nextMap[word._id]
+          : (word.nextReview || null)
       }),
       stageLabel: this.getStageLabel(this.getWordStage({
         proficiency: profMap[word._id] || 0,
-        nextReview: nextMap[word._id] || null
+        nextReview: Object.prototype.hasOwnProperty.call(nextMap, word._id)
+          ? nextMap[word._id]
+          : (word.nextReview || null)
       }))
     }))
   },
@@ -653,10 +826,6 @@ Page({
       favoritePage: 0,
       hasMoreFavorites: true
     })
-
-    if (this.data.currentTab === 'favorites') {
-      await this.loadMoreFavorites()
-    }
   },
 
   async loadMoreFavorites() {
@@ -681,7 +850,7 @@ Page({
         limit: PAGE_SIZE
       })
 
-      const words = await this.attachWordMeta(result.words || [])
+      const words = await this.attachWordMeta(result.words || [], { forceFavorited: true })
       this.setData({
         favoriteWords: this.data.favoriteWords.concat(words),
         favoritePage: this.data.favoritePage + 1,
@@ -713,6 +882,7 @@ Page({
   async applySettings() {
     await this.saveSettings()
     this.setData({ showSettings: false })
+    await this.flushPendingWordRecords()
     await this.clearPersistedSessionSnapshot()
     await this.buildSession()
     wx.showToast({
@@ -722,6 +892,7 @@ Page({
   },
 
   async refreshSession() {
+    await this.flushPendingWordRecords()
     await this.clearPersistedSessionSnapshot()
     this.setData({
       sessionStats: { ...DEFAULT_SESSION_STATS }
@@ -730,6 +901,7 @@ Page({
   },
 
   async onLevelChange(e) {
+    await this.flushPendingWordRecords()
     this.setData({
       levelIndex: Number(e.detail.value),
       showSettings: false
@@ -762,6 +934,11 @@ Page({
 
     if (section === 'favorites' && this.data.favoriteWords.length === 0) {
       await this.loadMoreFavorites()
+      return
+    }
+
+    if (section === 'library' && this.data.libraryWords.length === 0) {
+      await this.loadMoreLibrary()
     }
   },
 
@@ -795,23 +972,16 @@ Page({
     const currentWord = this.data.currentWord
     if (!currentWord) return
 
-    const userId = this.getUserId()
-    let result = {
-      ok: false,
-      proficiency: currentWord.proficiency || 0,
-      nextReview: currentWord.nextReview || null
-    }
+    let result = this.getPredictedRecordResult(currentWord, rating)
 
     try {
-      if (userId) {
-        result = await this.callWordService('updateRecord', {
-          userId,
-          collection: this.getCurrentCollection(),
+      if (this.getUserId()) {
+        this.enqueuePendingWordRecord({
           word_id: currentWord._id,
-          rating
+          rating,
+          word_order: currentWord.order || 0,
+          session_type: currentWord.sessionType || ''
         })
-      } else {
-        result = this.getGuestResult(currentWord, rating)
       }
     } catch (error) {
       console.error('handleRating failed', error)
@@ -819,25 +989,42 @@ Page({
         title: '保存学习结果失败',
         icon: 'none'
       })
-      return
     }
 
     await this.applyRatingResult(rating, result)
   },
 
-  getGuestResult(word, rating) {
+  getPredictedRecordResult(word, rating) {
     const oldProficiency = word.proficiency || 0
+    const oldStability = Number(word.stability || 0.6)
     let proficiency = oldProficiency
     if (rating === 'again') {
       proficiency = Math.max(0, oldProficiency - 1)
+    } else if (rating === 'hard') {
+      proficiency = Math.max(0, oldProficiency)
     } else if (rating === 'good') {
       proficiency = Math.min(6, oldProficiency + 1)
     }
 
+    const byRating = {
+      again: [10, 15, 30, 60, 120, 240],
+      hard: [30, 360, 720, 1440, 2880, 5760],
+      good: [720, 1440, 4320, 7200, 10080, 20160]
+    }
+    const table = byRating[rating] || byRating.good
+    const index = Math.max(0, Math.min(proficiency, table.length - 1))
+    const scheduledMinutes = table[index]
+    const stabilityMultiplier = rating === 'again' ? 0.6 : rating === 'hard' ? 1.05 : 1.6
+    const stabilityBonus = rating === 'again' ? 0.1 : rating === 'hard' ? 0.25 : 0.6
+    const stability = Math.max(0.2, oldStability * stabilityMultiplier + stabilityBonus)
+    const intervalMs = Math.max(scheduledMinutes * 60 * 1000, Math.round(stability * 60 * 60 * 1000))
+
     return {
       ok: true,
       proficiency,
-      nextReview: new Date(Date.now() + (rating === 'again' ? 10 : rating === 'hard' ? 60 : 24 * 60) * 60 * 1000)
+      stability,
+      intervalMs,
+      nextReview: new Date(Date.now() + intervalMs)
     }
   },
 
@@ -848,6 +1035,7 @@ Page({
     const updatedWord = {
       ...currentWord,
       proficiency: result.proficiency || 0,
+      stability: result.stability || currentWord.stability || 0,
       nextReview: result.nextReview || null,
       hasRecord: true,
       stage: this.getWordStage({
@@ -939,6 +1127,7 @@ Page({
     const patchList = list => list.map(item => item._id === word._id ? {
       ...item,
       proficiency: word.proficiency,
+      stability: word.stability,
       nextReview: word.nextReview,
       hasRecord: word.hasRecord,
       stage: word.stage,
@@ -977,6 +1166,21 @@ Page({
     this.toggleFavoriteForWord(word)
   },
 
+  buildWordMetaSnapshot(word, isFavorited) {
+    const proficiency = Number(this.data.profMap[word._id] || word.proficiency || 0)
+    const nextReview = word.nextReview || null
+    const stage = this.getWordStage({ proficiency, nextReview })
+    return {
+      ...word,
+      proficiency,
+      nextReview,
+      hasRecord: !!this.data.learnedMap[word._id] || !!word.hasRecord,
+      isFavorited: !!isFavorited,
+      stage,
+      stageLabel: this.getStageLabel(stage)
+    }
+  },
+
   async toggleFavoriteForWord(word) {
     const userId = this.getUserId()
     if (!userId) {
@@ -996,7 +1200,7 @@ Page({
         [word._id]: !!result.status
       }
 
-      this.patchFavoriteAcrossLists(word._id, !!result.status)
+      this.patchFavoriteAcrossLists(word, !!result.status)
       this.setData({
         favMap,
         currentWord: this.data.currentWord && this.data.currentWord._id === word._id
@@ -1007,7 +1211,7 @@ Page({
           : this.data.detailWord
       })
 
-      if (this.data.currentTab === 'favorites') {
+      if (this.data.currentTab === 'favorites' || this.data.drawerSection === 'favorites') {
         await this.resetFavorites()
         await this.loadMoreFavorites()
       }
@@ -1016,13 +1220,19 @@ Page({
     }
   },
 
-  patchFavoriteAcrossLists(wordId, isFavorited) {
+  patchFavoriteAcrossLists(word, isFavorited) {
+    const wordId = word._id
     const patchList = list => list.map(item => item._id === wordId ? { ...item, isFavorited } : item)
+    const patchedFavorites = patchList(this.data.favoriteWords).filter(item => item.isFavorited)
+    const favoriteExists = patchedFavorites.some(item => item._id === wordId)
+    const nextFavoriteWords = isFavorited && !favoriteExists
+      ? [this.buildWordMetaSnapshot(word, true), ...patchedFavorites]
+      : patchedFavorites
 
     this.setData({
       libraryWords: patchList(this.data.libraryWords),
       filteredLibraryWords: patchList(this.data.filteredLibraryWords),
-      favoriteWords: patchList(this.data.favoriteWords).filter(item => item.isFavorited),
+      favoriteWords: nextFavoriteWords,
       sessionWords: this.data.sessionWords.map(item => item._id === wordId ? { ...item, isFavorited } : item)
     })
   },

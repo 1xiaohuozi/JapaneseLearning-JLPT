@@ -56,30 +56,46 @@
       <text class="star-text">{{currentProficiency}} / 5</text>
     </view>
 
-    <view class="answer-row" wx:if="{{!showDetail}}">
-      <button class="unknown-btn" bindtap="handleAnswer" data-known="false">不认识</button>
-      <button class="known-btn" bindtap="handleAnswer" data-known="true">认识</button>
+    <view class="study-stage">
+      <view class="answer-row {{showDetail ? 'answer-row-hidden' : ''}}">
+        <button class="unknown-btn" bindtap="handleAnswer" data-known="false">不认识</button>
+        <button class="known-btn" bindtap="handleAnswer" data-known="true">认识</button>
+      </view>
+      <view wx:if="{{showDetail}}" class="answer-hint">
+        <text>详情已展开，底部可直接进入下一条。</text>
+      </view>
     </view>
+  </view>
 
-    <view class="detail-stack" wx:if="{{showDetail}}">
-      <view class="detail-box" wx:if="{{currentGrammar.connection}}">
-        <text class="detail-label">接续</text>
-        <text class="detail-text">{{currentGrammar.connection}}</text>
+  <view wx:if="{{showDetail && currentGrammar}}" class="detail-overlay" catchtap="noop">
+    <view class="detail-mask"></view>
+    <view class="detail-sheet" catchtap="noop">
+      <view class="detail-sheet-handle"></view>
+      <view class="detail-sheet-head">
+        <text class="detail-sheet-title">{{currentGrammar.title}}</text>
+        <text class="detail-sheet-subtitle">#{{currentGrammar.grammar_id}} · {{currentCollectionLabel}}</text>
       </view>
-      <view class="detail-box">
-        <text class="detail-label">意思</text>
-        <text class="detail-text">{{currentGrammar.meaning}}</text>
+      <scroll-view class="detail-scroll" scroll-y enhanced show-scrollbar="false">
+        <view class="detail-box" wx:if="{{currentGrammar.connection}}">
+          <text class="detail-label">接续</text>
+          <text class="detail-text">{{currentGrammar.connection}}</text>
+        </view>
+        <view class="detail-box">
+          <text class="detail-label">意思</text>
+          <text class="detail-text">{{currentGrammar.meaning}}</text>
+        </view>
+        <view class="detail-box" wx:if="{{currentGrammar.example}}">
+          <text class="detail-label">例句</text>
+          <text class="detail-text">{{currentGrammar.example}}</text>
+        </view>
+        <view class="detail-box" wx:if="{{currentGrammar.note}}">
+          <text class="detail-label">备注</text>
+          <text class="detail-text">{{currentGrammar.note}}</text>
+        </view>
+      </scroll-view>
+      <view class="detail-footer">
+        <button class="next-btn" bindtap="nextGrammar">下一条</button>
       </view>
-      <view class="detail-box" wx:if="{{currentGrammar.example}}">
-        <text class="detail-label">例句</text>
-        <text class="detail-text">{{currentGrammar.example}}</text>
-      </view>
-      <view class="detail-box" wx:if="{{currentGrammar.note}}">
-        <text class="detail-label">备注</text>
-        <text class="detail-text">{{currentGrammar.note}}</text>
-      </view>
-
-      <button class="next-btn" bindtap="nextGrammar">下一条</button>
     </view>
   </view>
 

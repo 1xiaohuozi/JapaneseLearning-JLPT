@@ -8,7 +8,8 @@ const MAX_BATCH = 100
 const DEFAULT_PROFILE = {
   collection: 'n2_words',
   newLimit: 20,
-  reviewLimit: 40
+  reviewLimit: 40,
+  lastNewOrder: 0
 }
 
 function getProfileDocId(userId) {
@@ -53,6 +54,58 @@ async function getWordsByIds(collectionName, ids) {
   )
 
   return parts.flatMap(res => res.data || [])
+}
+
+async function getRecordsByWordIds(userId, collection, ids) {
+  if (!userId || !collection || !ids.length) return []
+
+  const parts = await Promise.all(
+    chunk(ids).map(part =>
+      db.collection('user_word_records')
+        .where({
+          user_id: userId,
+          collection,
+          word_id: _.in(part)
+        })
+        .field({ word_id: true, proficiency: true, nextReview: true, stability: true, word_order: true })
+        .get()
+    )
+  )
+
+  return parts.flatMap(res => res.data || [])
+}
+
+async function readProfileDoc(userId) {
+  if (!userId) return null
+  try {
+    const doc = await db.collection('user_word_progress').doc(getProfileDocId(userId)).get()
+    return doc.data || null
+  } catch (error) {
+    return null
+  }
+}
+
+async function getFavoriteSetByWordIds(userId, collection, ids) {
+  if (!userId || !collection || !ids.length) return new Set()
+
+  const parts = await Promise.all(
+    chunk(ids).map(part =>
+      db.collection('user_word_favorites')
+        .where({
+          user_id: userId,
+          collection,
+          word_id: _.in(part)
+        })
+        .field({ word_id: true })
+        .get()
+    )
+  )
+
+  return new Set(
+    parts
+      .flatMap(res => res.data || [])
+      .map(item => item.word_id)
+  )
 }
 
 function normalizeWord(word, recordMap, favoriteSet, sessionType = 'library') {
@@ -174,66 +227,124 @@ async function buildSession({ userId, collection, newLimit = 20, reviewLimit = 4
   const totalRes = await db.collection(collection).count()
   const totalWords = totalRes.total || 0
   const todayKey = resolveDateKey(dateKey)
+  const nowDate = new Date()
 
-  const [records, favorites] = userId
+  const [
+    learnedCountRes,
+    masteredCountRes,
+    dueCountRes,
+    dueRecordRes,
+    profileDoc
+  ] = userId
     ? await Promise.all([
-        getAllByQuery('user_word_records', { user_id: userId, collection }),
-        getAllByQuery('user_word_favorites', { user_id: userId, collection }, { field: { word_id: true } })
+        db.collection('user_word_records').where({ user_id: userId, collection }).count(),
+        db.collection('user_word_records').where({
+          user_id: userId,
+          collection,
+          proficiency: _.gte(5)
+        }).count(),
+        db.collection('user_word_records').where({
+          user_id: userId,
+          collection,
+          nextReview: _.lte(nowDate)
+        }).count(),
+        db.collection('user_word_records').where({
+          user_id: userId,
+          collection,
+          nextReview: _.lte(nowDate)
+        })
+          .orderBy('nextReview', 'asc')
+          .limit(reviewLimit)
+          .field({ word_id: true, proficiency: true, nextReview: true, stability: true, word_order: true })
+          .get(),
+        readProfileDoc(userId)
       ])
-    : [[], []]
+    : [{ total: 0 }, { total: 0 }, { total: 0 }, { data: [] }, null]
 
-  const favoriteSet = new Set((favorites || []).map(item => item.word_id))
-  const recordMap = {}
-  const learnedIds = new Set()
-  const dueRecordIds = []
-
-  const now = Date.now()
-  records.forEach(record => {
-    recordMap[record.word_id] = record
-    learnedIds.add(record.word_id)
-
-    if (!record.nextReview || new Date(record.nextReview).getTime() <= now) {
-      dueRecordIds.push(record.word_id)
-    }
+  const learnedWords = learnedCountRes.total || 0
+  const masteredCount = masteredCountRes.total || 0
+  const dueCount = dueCountRes.total || 0
+  const dueRecords = dueRecordRes.data || []
+  const dueRecordIds = dueRecords.map(record => record.word_id)
+  const dueRecordMap = {}
+  dueRecords.forEach(record => {
+    dueRecordMap[record.word_id] = record
   })
 
-  const dueWordsRaw = await getWordsByIds(collection, dueRecordIds.slice(0, reviewLimit))
+  const dueWordsRaw = await getWordsByIds(collection, dueRecordIds)
   const dueWordMap = new Map(dueWordsRaw.map(word => [word._id, word]))
+
+  const queuedNewIds = []
+  const queuedNewWordMap = new Map()
+  const recordMap = { ...dueRecordMap }
+  let lastNewOrder = Number(profileDoc?.last_new_order) || 0
+
+  if (newLimit > 0 && learnedWords < totalWords) {
+    let wrapped = false
+    let cursor = lastNewOrder
+
+    while (queuedNewIds.length < newLimit) {
+      let query = db.collection(collection).orderBy('order', 'asc').limit(MAX_BATCH)
+      if (cursor > 0 && !wrapped) {
+        query = query.where({ order: _.gt(cursor) })
+      }
+
+      const batchRes = await query.get()
+      const batchWords = batchRes.data || []
+      if (!batchWords.length) {
+        if (wrapped || cursor <= 0) break
+        wrapped = true
+        cursor = 0
+        continue
+      }
+
+      const existingRecords = await getRecordsByWordIds(
+        userId,
+        collection,
+        batchWords.map(word => word._id)
+      )
+      const existingSet = new Set(existingRecords.map(record => record.word_id))
+      existingRecords.forEach(record => {
+        recordMap[record.word_id] = record
+      })
+
+      batchWords.forEach(word => {
+        if (queuedNewIds.length >= newLimit) return
+        if (!existingSet.has(word._id)) {
+          queuedNewIds.push(word._id)
+          queuedNewWordMap.set(word._id, word)
+          lastNewOrder = Math.max(lastNewOrder, Number(word.order) || 0)
+        }
+      })
+
+      const lastBatchOrder = Number(batchWords[batchWords.length - 1]?.order) || 0
+      if (batchWords.length < MAX_BATCH) {
+        if (wrapped) break
+        wrapped = true
+        cursor = 0
+      } else {
+        cursor = lastBatchOrder
+      }
+    }
+  }
+
+  const sessionIds = dueRecordIds.concat(queuedNewIds)
+  const favoriteSet = await getFavoriteSetByWordIds(userId, collection, sessionIds)
   const dueWords = dueRecordIds
-    .slice(0, reviewLimit)
     .map(id => dueWordMap.get(id))
     .filter(Boolean)
     .map(word => normalizeWord(word, recordMap, favoriteSet, 'review'))
 
-  const newWords = []
-  if (newLimit > 0 && learnedIds.size < totalWords) {
-    let skip = 0
+  const newWords = queuedNewIds
+    .map(id => queuedNewWordMap.get(id))
+    .filter(Boolean)
+    .map(word => normalizeWord(word, recordMap, favoriteSet, 'new'))
 
-    while (newWords.length < newLimit && skip < totalWords) {
-      const batchRes = await db.collection(collection)
-        .orderBy('order', 'asc')
-        .skip(skip)
-        .limit(MAX_BATCH)
-        .get()
-
-      const candidates = (batchRes.data || []).filter(word => !learnedIds.has(word._id))
-      candidates.forEach(word => {
-        if (newWords.length < newLimit) {
-          newWords.push(normalizeWord(word, recordMap, favoriteSet, 'new'))
-        }
-      })
-
-      if ((batchRes.data || []).length < MAX_BATCH) break
-      skip += MAX_BATCH
-    }
-  }
-
-  const masteredCount = records.filter(record => (record.proficiency || 0) >= 5).length
   const freshStats = {
     totalWords,
-    learnedWords: learnedIds.size,
-    dueCount: dueRecordIds.length,
-    availableNewCount: Math.max(totalWords - learnedIds.size, 0),
+    learnedWords,
+    dueCount,
+    availableNewCount: Math.max(totalWords - learnedWords, 0),
     masteredCount,
     sessionSize: dueWords.length + newWords.length,
     reviewPlanned: dueWords.length,
@@ -249,14 +360,15 @@ async function buildSession({ userId, collection, newLimit = 20, reviewLimit = 4
     ) {
       const savedWordsRaw = await getWordsByIds(collection, savedProgress.queueIds)
       const savedWordMap = new Map(savedWordsRaw.map(word => [word._id, word]))
+      const savedFavoriteSet = await getFavoriteSetByWordIds(userId, collection, savedProgress.queueIds)
       const savedWords = savedProgress.queueIds
         .map(id => savedWordMap.get(id))
         .filter(Boolean)
         .map(word => normalizeWord(
           word,
           recordMap,
-          favoriteSet,
-          learnedIds.has(word._id) ? 'review' : 'new'
+          savedFavoriteSet,
+          recordMap[word._id] ? 'review' : 'new'
         ))
 
       return {
@@ -270,13 +382,27 @@ async function buildSession({ userId, collection, newLimit = 20, reviewLimit = 4
     }
   }
 
+  if (userId && lastNewOrder !== (Number(profileDoc?.last_new_order) || 0)) {
+    await db.collection('user_word_progress').doc(getProfileDocId(userId)).set({
+      data: {
+        doc_type: 'profile',
+        user_id: userId,
+        collection: profileDoc?.collection || collection,
+        new_limit: Number(profileDoc?.new_limit) || DEFAULT_PROFILE.newLimit,
+        review_limit: Number(profileDoc?.review_limit) || DEFAULT_PROFILE.reviewLimit,
+        last_new_order: lastNewOrder,
+        update_time: db.serverDate()
+      }
+    })
+  }
+
   return {
     sessionWords: buildSessionQueue(dueWords, newWords),
     stats: freshStats
   }
 }
 
-async function updateRecord({ userId, word_id, collection, rating = 'good' }) {
+async function updateRecord({ userId, word_id, collection, rating = 'good', word_order = 0 }) {
   if (!userId || !word_id || !collection) {
     return { ok: false, error: 'missing_params' }
   }
@@ -315,6 +441,10 @@ async function updateRecord({ userId, word_id, collection, rating = 'good' }) {
     update_time: db.serverDate()
   }
 
+  if (Number(word_order)) {
+    baseData.word_order = Number(word_order)
+  }
+
   if (existing) {
     await db.collection('user_word_records').doc(existing._id).update({
       data: {
@@ -341,6 +471,53 @@ async function updateRecord({ userId, word_id, collection, rating = 'good' }) {
     stability,
     nextReview,
     intervalMs
+  }
+}
+
+async function batchUpdateRecords({ userId, collection, records = [] }) {
+  if (!userId || !collection || !Array.isArray(records) || !records.length) {
+    return { ok: false, error: 'missing_params' }
+  }
+
+  const profileDoc = await readProfileDoc(userId)
+  let lastNewOrder = Number(profileDoc?.last_new_order) || 0
+  const results = []
+  for (const record of records) {
+    if (!record || !record.word_id) continue
+    const result = await updateRecord({
+      userId,
+      collection,
+      word_id: record.word_id,
+      rating: record.rating || 'good',
+      word_order: record.word_order || 0
+    })
+    if (record.session_type === 'new' && Number(record.word_order) > lastNewOrder) {
+      lastNewOrder = Number(record.word_order)
+    }
+    results.push({
+      word_id: record.word_id,
+      ...result
+    })
+  }
+
+  if (lastNewOrder !== (Number(profileDoc?.last_new_order) || 0)) {
+    await db.collection('user_word_progress').doc(getProfileDocId(userId)).set({
+      data: {
+        doc_type: 'profile',
+        user_id: userId,
+        collection: profileDoc?.collection || collection,
+        new_limit: Number(profileDoc?.new_limit) || DEFAULT_PROFILE.newLimit,
+        review_limit: Number(profileDoc?.review_limit) || DEFAULT_PROFILE.reviewLimit,
+        last_new_order: lastNewOrder,
+        update_time: db.serverDate()
+      }
+    })
+  }
+
+  return {
+    ok: true,
+    processed: results.length,
+    results
   }
 }
 
@@ -425,15 +602,16 @@ async function getUserProfile({ userId }) {
   }
 
   try {
-    const doc = await db.collection('user_word_progress').doc(getProfileDocId(userId)).get()
+    const doc = await readProfileDoc(userId)
     return {
       profile: {
         ...DEFAULT_PROFILE,
-        collection: doc.data.collection || DEFAULT_PROFILE.collection,
-        newLimit: Number(doc.data.new_limit) || DEFAULT_PROFILE.newLimit,
-        reviewLimit: Number(doc.data.review_limit) || DEFAULT_PROFILE.reviewLimit
+        collection: doc?.collection || DEFAULT_PROFILE.collection,
+        newLimit: Number(doc?.new_limit) || DEFAULT_PROFILE.newLimit,
+        reviewLimit: Number(doc?.review_limit) || DEFAULT_PROFILE.reviewLimit,
+        lastNewOrder: Number(doc?.last_new_order) || DEFAULT_PROFILE.lastNewOrder
       },
-      hasProfile: true
+      hasProfile: !!doc
     }
   } catch (error) {
     return { profile: { ...DEFAULT_PROFILE }, hasProfile: false }
@@ -442,6 +620,7 @@ async function getUserProfile({ userId }) {
 
 async function saveUserProfile({ userId, payload }) {
   if (!userId || !payload) return { ok: false }
+  const profileDoc = await readProfileDoc(userId)
 
   await db.collection('user_word_progress').doc(getProfileDocId(userId)).set({
     data: {
@@ -450,6 +629,7 @@ async function saveUserProfile({ userId, payload }) {
       collection: payload.collection || DEFAULT_PROFILE.collection,
       new_limit: Number(payload.newLimit) || DEFAULT_PROFILE.newLimit,
       review_limit: Number(payload.reviewLimit) || DEFAULT_PROFILE.reviewLimit,
+      last_new_order: Number(payload.lastNewOrder ?? profileDoc?.last_new_order) || DEFAULT_PROFILE.lastNewOrder,
       update_time: db.serverDate()
     }
   })
@@ -459,7 +639,8 @@ async function saveUserProfile({ userId, payload }) {
     profile: {
       collection: payload.collection || DEFAULT_PROFILE.collection,
       newLimit: Number(payload.newLimit) || DEFAULT_PROFILE.newLimit,
-      reviewLimit: Number(payload.reviewLimit) || DEFAULT_PROFILE.reviewLimit
+      reviewLimit: Number(payload.reviewLimit) || DEFAULT_PROFILE.reviewLimit,
+      lastNewOrder: Number(payload.lastNewOrder ?? profileDoc?.last_new_order) || DEFAULT_PROFILE.lastNewOrder
     }
   }
 }
@@ -486,6 +667,8 @@ exports.main = async (event) => {
         return await buildSession(event)
       case 'updateRecord':
         return await updateRecord(event)
+      case 'batchUpdateRecords':
+        return await batchUpdateRecords(event)
       case 'toggleFavorite':
         return await toggleFavorite(event)
       case 'getFavorites':

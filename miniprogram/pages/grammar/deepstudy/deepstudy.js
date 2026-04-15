@@ -390,6 +390,8 @@ Page({
     })
   },
 
+  noop() {},
+
   onShareAppMessage() {
     return {
       title: `我正在学习 ${this.data.currentCollectionLabel} 语法`,
