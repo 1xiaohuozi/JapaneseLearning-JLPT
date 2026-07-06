@@ -1,4 +1,46 @@
 <scroll-view class="profile-page" scroll-y enable-flex>
+  <view class="today-panel">
+    <view class="today-head">
+      <view>
+        <text class="section-kicker">今日学习台</text>
+        <text class="section-title">完成 {{dailySummary.completedCount}} / {{dailySummary.totalCount}}</text>
+        <text class="plan-subtitle">{{planCopy.title}}</text>
+      </view>
+      <view class="streak-pill" bindtap="openPlanSetup">
+        <text class="streak-number">{{dailySummary.streak}}</text>
+        <text class="streak-label">连续天</text>
+      </view>
+    </view>
+
+    <view class="plan-card" bindtap="openPlanSetup">
+      <text class="plan-card-title">{{planCopy.subtitle}}</text>
+      <text class="plan-card-desc">{{planCopy.dailyText}}</text>
+      <text class="plan-card-action">调整计划</text>
+    </view>
+
+    <view class="today-progress">
+      <view class="today-progress-fill" style="width: {{dailySummary.progressPercent}}%;"></view>
+    </view>
+
+    <view class="task-list">
+      <view
+        wx:for="{{dailySummary.taskList}}"
+        wx:key="key"
+        class="task-row {{item.completed ? 'done' : ''}}"
+        bindtap="goToDailyTask"
+        data-key="{{item.key}}"
+      >
+        <view class="task-check">{{item.completed ? '✓' : ''}}</view>
+        <view class="task-copy">
+          <text class="task-title">{{item.title}}</text>
+          <text class="task-desc">{{item.detail || item.desc}}</text>
+        </view>
+        <text class="task-action">{{item.completed ? '回顾' : '去完成'}}</text>
+      </view>
+    </view>
+
+  </view>
+
   <view class="hero-card">
     <view class="hero-glow hero-glow-one"></view>
     <view class="hero-glow hero-glow-two"></view>
@@ -64,3 +106,65 @@
     <button wx:else class="account-btn logout" bindtap="handleLogout">退出登录</button>
   </view>
 </scroll-view>
+
+<view wx:if="{{showPlanSetup}}" class="plan-mask">
+  <view class="plan-modal">
+    <view class="plan-modal-head">
+      <view>
+        <text class="plan-modal-kicker">学习计划</text>
+        <text class="plan-modal-title">先定一个今天能完成的目标</text>
+      </view>
+      <button wx:if="{{studyPlan.setupDone}}" class="plan-close" bindtap="closePlanSetup">×</button>
+    </view>
+
+    <view class="plan-block">
+      <text class="plan-block-title">目标等级</text>
+      <view class="option-row">
+        <view
+          wx:for="{{levelOptions}}"
+          wx:key="key"
+          class="option-chip {{planDraft.targetLevel === item.key ? 'active' : ''}}"
+          data-level="{{item.key}}"
+          bindtap="choosePlanLevel"
+        >{{item.label}}</view>
+      </view>
+    </view>
+
+    <view class="plan-block">
+      <text class="plan-block-title">每天投入</text>
+      <view class="time-list">
+        <view
+          wx:for="{{timeOptions}}"
+          wx:key="minutes"
+          class="time-option {{planDraft.dailyMinutes === item.minutes ? 'active' : ''}}"
+          data-minutes="{{item.minutes}}"
+          bindtap="choosePlanTime"
+        >
+          <text class="time-label">{{item.label}}</text>
+          <text class="time-desc">新词 {{item.newLimit}} · 复习 {{item.reviewLimit}} · 语法 {{item.grammarLimit}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="jlpt-row">
+      <view>
+        <text class="jlpt-title">参加下次 JLPT</text>
+        <text class="jlpt-desc">开启后会按备考节奏提醒你推进</text>
+      </view>
+      <view class="jlpt-options">
+        <view
+          class="jlpt-option {{planDraft.takesJlpt ? 'active' : ''}}"
+          data-value="true"
+          bindtap="choosePlanJlpt"
+        >是</view>
+        <view
+          class="jlpt-option {{!planDraft.takesJlpt ? 'active' : ''}}"
+          data-value="false"
+          bindtap="choosePlanJlpt"
+        >否</view>
+      </view>
+    </view>
+
+    <button class="plan-save" bindtap="savePlanSetup">生成今日计划</button>
+  </view>
+</view>

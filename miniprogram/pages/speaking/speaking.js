@@ -1,4 +1,6 @@
 const db = wx.cloud.database()
+const { markTaskCompleted, getTodayTask, getNextTaskSuggestion } = require('../../utils/retention')
+const { getStudyPlan } = require('../../utils/studyPlan')
 
 const SECTION_BATCH_SIZE = 20
 const RECORD_BATCH_SIZE = 20
@@ -23,12 +25,19 @@ Page({
     userRecords: [],
     listeningProgress: 0,
     listeningProgressStr: '0%',
+    listeningTarget: 1,
+    listeningTodayDone: 0,
     currentSectionId: '',
     currentPlayCount: 0,
     currentIsLearned: false
   },
 
   onLoad() {
+    const plan = getStudyPlan()
+    this.setData({
+      listeningTarget: plan.daily.listeningLimit || 1,
+      listeningTodayDone: this.getTodayListeningDone()
+    })
     this.innerAudioContext = wx.createInnerAudioContext()
 
     this.innerAudioContext.onPlay(() => this.setData({ isPlaying: true }))
@@ -67,7 +76,28 @@ Page({
   },
 
   onShow() {
+    const plan = getStudyPlan()
+    this.setData({
+      listeningTarget: plan.daily.listeningLimit || 1,
+      listeningTodayDone: this.getTodayListeningDone()
+    })
     this.syncModalPreference()
+  },
+
+  getTodayListeningDone() {
+    return Number(getTodayTask('listening').count) || 0
+  },
+
+  getUserKey() {
+    const userId = wx.getStorageSync('userId')
+    if (userId) return userId
+
+    const cachedGuestId = wx.getStorageSync('guestUserId')
+    if (cachedGuestId) return cachedGuestId
+
+    const guestId = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    wx.setStorageSync('guestUserId', guestId)
+    return guestId
   },
 
   onUnload() {
@@ -118,7 +148,10 @@ Page({
       await this.loadUserRecords()
 
       const lastSectionId = wx.getStorageSync('lastSectionId')
-      if (lastSectionId && sections.some(section => section._id === lastSectionId)) {
+      const entryAction = this.consumeSpeakingEntryAction()
+      if (entryAction && entryAction.type === 'weak') {
+        this.loadWeakSection()
+      } else if (lastSectionId && sections.some(section => section._id === lastSectionId)) {
         this.loadSection(lastSectionId)
       } else if (sections.length) {
         this.loadSection(sections[0]._id)
@@ -126,6 +159,39 @@ Page({
     } catch (error) {
       console.error('加载章节失败:', error)
     }
+  },
+
+  consumeSpeakingEntryAction() {
+    const action = wx.getStorageSync('speaking_entry_action')
+    if (!action || !action.type) return null
+    wx.removeStorageSync('speaking_entry_action')
+    return action
+  },
+
+  loadWeakSection() {
+    const target = this.findWeakSection()
+    if (target) {
+      this.loadSection(target._id)
+      wx.showToast({ title: '已定位少听章节', icon: 'none' })
+      return
+    }
+    if (this.data.sections.length) {
+      this.loadSection(this.data.sections[0]._id)
+    }
+  },
+
+  findWeakSection() {
+    const sections = this.data.sections || []
+    if (!sections.length) return null
+
+    const unlearned = sections.find(section => !section.isLearned)
+    if (unlearned) return unlearned
+
+    return sections.slice().sort((a, b) => {
+      const playDiff = (Number(a.playCount) || 0) - (Number(b.playCount) || 0)
+      if (playDiff !== 0) return playDiff
+      return (Number(a.order) || 0) - (Number(b.order) || 0)
+    })[0]
   },
 
   loadSection(sectionId) {
@@ -170,7 +236,7 @@ Page({
   },
 
   async loadUserRecords() {
-    const userId = wx.getStorageSync('userId') || 'guest'
+    const userId = this.getUserKey()
 
     try {
       const countRes = await db.collection('user_speaking_records').where({ user_id: userId }).count()
@@ -223,9 +289,10 @@ Page({
   },
 
   async recordCurrentSectionPlay() {
-    const userId = wx.getStorageSync('userId') || 'guest'
+    const userId = this.getUserKey()
     const { sectionId } = this.data
     if (!sectionId) return
+    const wasLearned = !!this.data.currentIsLearned
 
     try {
       const res = await db.collection('user_speaking_records')
@@ -266,9 +333,78 @@ Page({
         listeningProgress,
         listeningProgressStr: `${Math.round(listeningProgress)}%`
       })
+
+      if (!wasLearned) {
+        this.showListeningRecap(nextCount, listeningProgress)
+      }
     } catch (error) {
       console.error('保存学习记录失败:', error)
     }
+  },
+
+  showListeningRecap(playCount, listeningProgress) {
+    markTaskCompleted('listening', {
+      text: `完成 1 个听力章节`,
+      uniqueId: this.data.sectionId,
+      sectionTitle: this.data.sectionTitle,
+      playCount,
+      listeningProgress: Math.round(listeningProgress)
+    })
+    this.setData({
+      listeningTodayDone: this.getTodayListeningDone()
+    })
+
+    wx.showModal({
+      title: '听力跟读已记录',
+      content: `本节「${this.data.sectionTitle}」已完成，当前听力进度 ${Math.round(listeningProgress)}%。接下来可以回学习台、继续下一节，或者重听本节巩固。`,
+      confirmText: '选择下一步',
+      showCancel: false,
+      success: () => this.showListeningNextActions()
+    })
+  },
+
+  showListeningNextActions() {
+    const nextTask = getNextTaskSuggestion('listening')
+    wx.showActionSheet({
+      itemList: [
+        nextTask.label,
+        '状态不错，下一节',
+        '重听本节'
+      ],
+      success: res => {
+        if (res.tapIndex === 0) {
+          this.goToSuggestedTask(nextTask)
+          return
+        }
+        if (res.tapIndex === 1) {
+          this.nextSection()
+          return
+        }
+        this.replayCurrentSection()
+      }
+    })
+  },
+
+  goToSuggestedTask(nextTask) {
+    if (!nextTask || !nextTask.hasNext || !nextTask.task) {
+      wx.switchTab({ url: '/pages/profile/profile' })
+      return
+    }
+    if (nextTask.task.key === 'listening') {
+      this.nextSection()
+      return
+    }
+    wx.switchTab({ url: nextTask.task.route })
+  },
+
+  replayCurrentSection() {
+    if (!this.innerAudioContext || !this.innerAudioContext.src) return
+    this.innerAudioContext.seek(0)
+    this.setData({
+      currentTime: 0,
+      currentTimeStr: '0:00'
+    })
+    this.innerAudioContext.play()
   },
 
   onSliderChange(e) {

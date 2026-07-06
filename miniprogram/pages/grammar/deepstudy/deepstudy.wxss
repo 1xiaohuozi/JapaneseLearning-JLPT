@@ -89,6 +89,14 @@
   color: #10213a;
 }
 
+.hero-subtitle {
+  display: block;
+  margin-top: 10rpx;
+  color: #64748b;
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
 .collection-strip {
   margin-top: 22rpx;
   white-space: nowrap;
@@ -115,7 +123,7 @@
 
 .session-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 14rpx;
   margin-top: 24rpx;
 }

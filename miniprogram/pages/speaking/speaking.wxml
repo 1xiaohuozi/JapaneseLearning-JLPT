@@ -7,6 +7,14 @@
       </view>
       <view class="title-decoration"></view>
 
+      <view class="listening-goal-card">
+        <view>
+          <text class="goal-kicker">今日目标</text>
+          <text class="goal-title">听力跟读 {{listeningTodayDone}} / {{listeningTarget}} 节</text>
+        </view>
+        <text class="goal-reward">完成后可回学习台、听下一节，或重听本节。</text>
+      </view>
+
       <view class="listening-progress-container">
         <view class="progress-bar">
           <view class="progress-fill" style="width: {{listeningProgressStr}}"></view>

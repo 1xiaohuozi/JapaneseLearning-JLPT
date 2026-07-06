@@ -50,6 +50,40 @@
   background: linear-gradient(90deg, #7c3aed, #2563eb);
 }
 
+.listening-goal-card {
+  margin-top: 18rpx;
+  padding: 18rpx;
+  border-radius: 20rpx;
+  background: linear-gradient(135deg, #f5f3ff, #eff6ff);
+  border: 1rpx solid rgba(124, 58, 237, 0.12);
+}
+
+.goal-kicker,
+.goal-title,
+.goal-reward {
+  display: block;
+}
+
+.goal-kicker {
+  color: #7c3aed;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.goal-title {
+  margin-top: 6rpx;
+  color: #0f172a;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.goal-reward {
+  margin-top: 8rpx;
+  color: #64748b;
+  font-size: 22rpx;
+  line-height: 1.45;
+}
+
 .listening-progress-container {
   margin-top: 18rpx;
   display: flex;
@@ -142,7 +176,7 @@
 
 .dialogue-list {
   flex: 1;
-  margin-top: 240rpx;
+  margin-top: 360rpx;
   margin-bottom: 260rpx;
   padding: 8rpx 4rpx 0;
 }

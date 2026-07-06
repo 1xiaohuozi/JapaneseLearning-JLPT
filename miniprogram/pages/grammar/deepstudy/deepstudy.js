@@ -1,5 +1,7 @@
 const db = wx.cloud.database()
 const _ = db.command
+const { markTaskCompleted, getNextTaskSuggestion } = require('../../../utils/retention')
+const { getStudyPlan } = require('../../../utils/studyPlan')
 const BATCH_SIZE = 20
 
 const COLLECTIONS = [
@@ -26,7 +28,10 @@ Page({
     showDetail: false,
     allCompleted: false,
     reviewRemaining: 0,
-    newRemaining: 0
+    newRemaining: 0,
+    sessionTarget: 10,
+    sessionTotal: 0,
+    completedCount: 0
   },
 
   userId: '',
@@ -35,17 +40,34 @@ Page({
   favoriteMap: {},
   currentIndex: 0,
 
-  onLoad(options) {
+  onLoad(options = {}) {
+    this._pendingOptions = options || {}
+    this.initGrammarPage(options)
+  },
+
+  onShow() {
+    const userId = wx.getStorageSync('userId') || ''
+    if (!userId) return
+    if (this.userId !== userId || (!this.data.currentGrammar && !this.data.allCompleted && !this.data.loading)) {
+      this.initGrammarPage(this._pendingOptions || {})
+    }
+  },
+
+  initGrammarPage(options = {}) {
     const userId = wx.getStorageSync('userId') || ''
     if (!userId) {
+      this.setData({ loading: false })
       wx.showModal({
         title: '提示',
-        content: '深度学习需要先登录，是否现在前往登录？',
+        content: '语法学习需要先登录，登录后才能保存学习记录。现在去登录吗？',
+        confirmText: '去登录',
+        cancelText: '回学习台',
         success: (res) => {
           if (res.confirm) {
+            wx.setStorageSync('login_redirect_url', '/pages/grammar/deepstudy/deepstudy')
             wx.navigateTo({ url: '/pages/profile/login/login' })
           } else {
-            wx.navigateBack()
+            wx.switchTab({ url: '/pages/profile/profile' })
           }
         }
       })
@@ -132,6 +154,7 @@ Page({
   },
 
   buildStudyQueue(allGrammar, records) {
+    const sessionLimit = this.data.sessionTarget || 10
     const now = Date.now()
     const reviewQueue = []
     const newQueue = []
@@ -157,18 +180,47 @@ Page({
       return aTime - bTime
     })
 
-    const merged = []
-    const max = Math.max(reviewQueue.length, newQueue.length)
-    for (let i = 0; i < max; i += 1) {
-      if (i < reviewQueue.length) merged.push(reviewQueue[i])
-      if (i < newQueue.length) merged.push(newQueue[i])
+    const session = []
+    let reviewIndex = 0
+    let newIndex = 0
+
+    while (session.length < sessionLimit && (reviewIndex < reviewQueue.length || newIndex < newQueue.length)) {
+      if (reviewIndex < reviewQueue.length) {
+        session.push({ ...reviewQueue[reviewIndex], sessionType: 'review' })
+        reviewIndex += 1
+      }
+      if (session.length >= sessionLimit) break
+      if (reviewIndex < reviewQueue.length) {
+        session.push({ ...reviewQueue[reviewIndex], sessionType: 'review' })
+        reviewIndex += 1
+      }
+      if (session.length >= sessionLimit) break
+      if (newIndex < newQueue.length) {
+        session.push({ ...newQueue[newIndex], sessionType: 'new' })
+        newIndex += 1
+      }
     }
 
-    return { merged, reviewQueue, newQueue }
+    return {
+      merged: session,
+      reviewQueue,
+      newQueue,
+      sessionReviewCount: session.filter(item => item.sessionType === 'review').length,
+      sessionNewCount: session.filter(item => item.sessionType === 'new').length
+    }
   },
 
   async loadGrammar() {
-    this.setData({ loading: true, allCompleted: false, showDetail: false, currentGrammar: null })
+    this._grammarRecapShown = false
+    this._weakGrammarMap = {}
+    const plan = getStudyPlan()
+    this.setData({
+      loading: true,
+      allCompleted: false,
+      showDetail: false,
+      currentGrammar: null,
+      sessionTarget: plan.daily.grammarLimit || 10
+    })
     wx.showLoading({ title: '加载语法中' })
     try {
       const [allGrammar, records, favorites] = await Promise.all([
@@ -185,7 +237,7 @@ Page({
         this.favoriteMap[Number(item.grammar_id)] = item
       })
 
-      const { merged, reviewQueue, newQueue } = this.buildStudyQueue(allGrammar, this.studyRecords)
+      const { merged, sessionReviewCount, sessionNewCount } = this.buildStudyQueue(allGrammar, this.studyRecords)
       this.grammarList = merged
       this.currentIndex = 0
 
@@ -194,7 +246,9 @@ Page({
           loading: false,
           allCompleted: true,
           reviewRemaining: 0,
-          newRemaining: 0
+          newRemaining: 0,
+          sessionTotal: 0,
+          completedCount: 0
         })
         return
       }
@@ -206,8 +260,10 @@ Page({
         currentGrammar: first,
         currentProficiency: firstRecord.proficiency || 0,
         isFavorite: !!this.favoriteMap[Number(first.grammar_id)],
-        reviewRemaining: reviewQueue.length,
-        newRemaining: newQueue.length
+        reviewRemaining: sessionReviewCount,
+        newRemaining: sessionNewCount,
+        sessionTotal: merged.length,
+        completedCount: 0
       })
     } catch (error) {
       console.error('loadGrammar failed', error)
@@ -277,6 +333,15 @@ Page({
         collection: this.data.currentCollection,
         proficiency
       }
+      if (!known || proficiency < 4) {
+        this._weakGrammarMap = {
+          ...(this._weakGrammarMap || {}),
+          [grammarId]: {
+            ...this.data.currentGrammar,
+            sessionType: 'review'
+          }
+        }
+      }
       this.setData({
         currentProficiency: proficiency,
         showDetail: true
@@ -297,8 +362,10 @@ Page({
         allCompleted: true,
         showDetail: false,
         reviewRemaining: 0,
-        newRemaining: 0
+        newRemaining: 0,
+        completedCount: this.grammarList.length
       })
+      this.showStudyRecap()
       return
     }
     const currentGrammar = this.grammarList[this.currentIndex]
@@ -307,7 +374,7 @@ Page({
     let reviewRemaining = 0
     let newRemaining = 0
     remaining.forEach((item) => {
-      if (this.studyRecords[Number(item.grammar_id)]) reviewRemaining += 1
+      if (item.sessionType === 'review') reviewRemaining += 1
       else newRemaining += 1
     })
 
@@ -317,7 +384,90 @@ Page({
       isFavorite: !!this.favoriteMap[Number(currentGrammar.grammar_id)],
       showDetail: false,
       reviewRemaining,
-      newRemaining
+      newRemaining,
+      completedCount: this.currentIndex
+    })
+  },
+
+  showStudyRecap() {
+    if (this._grammarRecapShown || !this.grammarList.length) return
+    this._grammarRecapShown = true
+
+    const completed = this.grammarList.length
+    markTaskCompleted('grammar', {
+      text: `完成 ${completed} / ${this.data.sessionTarget} 条语法`,
+      completed,
+      collection: this.data.currentCollectionLabel
+    })
+
+    wx.showModal({
+      title: '语法巩固完成',
+      content: `本轮目标 ${this.data.sessionTarget} 条，你完成了 ${completed} 条 ${this.data.currentCollectionLabel} 语法。接下来可以回学习台、再来一轮，或者立刻补低熟练语法。`,
+      confirmText: '选择下一步',
+      showCancel: false,
+      success: () => this.showGrammarNextActions()
+    })
+  },
+
+  showGrammarNextActions() {
+    const weakCount = Object.keys(this._weakGrammarMap || {}).length
+    const nextTask = getNextTaskSuggestion('grammar')
+    wx.showActionSheet({
+      itemList: [
+        nextTask.label,
+        '状态不错，再来一轮',
+        weakCount ? `复习低熟练语法 ${weakCount} 条` : '查看语法收藏'
+      ],
+      success: res => {
+        if (res.tapIndex === 0) {
+          this.goToSuggestedTask(nextTask)
+          return
+        }
+        if (res.tapIndex === 1) {
+          this.loadGrammar()
+          return
+        }
+        if (weakCount) {
+          this.startWeakGrammarReview()
+        } else {
+          this.goToFavorites()
+        }
+      }
+    })
+  },
+
+  goToSuggestedTask(nextTask) {
+    if (!nextTask || !nextTask.hasNext || !nextTask.task) {
+      wx.switchTab({ url: '/pages/profile/profile' })
+      return
+    }
+    if (nextTask.task.key === 'grammar') {
+      this.loadGrammar()
+      return
+    }
+    wx.switchTab({ url: nextTask.task.route })
+  },
+
+  startWeakGrammarReview() {
+    const weakList = Object.values(this._weakGrammarMap || {})
+    if (!weakList.length) return
+    const first = weakList[0]
+    const firstRecord = this.studyRecords[Number(first.grammar_id)] || {}
+
+    this.grammarList = weakList
+    this.currentIndex = 0
+    this._grammarRecapShown = false
+    this._weakGrammarMap = {}
+    this.setData({
+      currentGrammar: first,
+      currentProficiency: firstRecord.proficiency || 0,
+      isFavorite: !!this.favoriteMap[Number(first.grammar_id)],
+      showDetail: false,
+      allCompleted: false,
+      reviewRemaining: weakList.length,
+      newRemaining: 0,
+      sessionTotal: weakList.length,
+      completedCount: 0
     })
   },
 

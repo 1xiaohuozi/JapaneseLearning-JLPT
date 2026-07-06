@@ -1,3 +1,5 @@
+const { migrateGuestProgressToUser } = require('../../../utils/retention')
+
 Page({
   async onLoginTap() {
     try {
@@ -23,11 +25,12 @@ Page({
       getApp().globalData.userId = openId || 'temp_' + Date.now()
       wx.setStorageSync('userInfo', userInfo)
       wx.setStorageSync('userId', getApp().globalData.userId)
+      migrateGuestProgressToUser(getApp().globalData.userId)
 
       // 4. 跳转页面
-      wx.switchTab({
-        url: '/pages/word-learning/word-learning'
-      })
+      const redirectUrl = wx.getStorageSync('login_redirect_url') || '/pages/profile/profile'
+      wx.removeStorageSync('login_redirect_url')
+      wx.switchTab({ url: redirectUrl })
       wx.showToast({
         title: '登录成功',
         icon: 'success'

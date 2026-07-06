@@ -15,7 +15,6 @@
 
 .topbar,
 .topbar-left,
-.session-strip,
 .action-row,
 .study-footer,
 .detail-header,
@@ -179,6 +178,46 @@
   box-shadow: 0 18rpx 36rpx rgba(37, 99, 235, 0.08);
 }
 
+.download-card {
+  margin-top: 16rpx;
+  padding: 20rpx 22rpx;
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.96) 0%, rgba(255, 255, 255, 0.94) 100%);
+  border: 1rpx solid rgba(37, 99, 235, 0.14);
+  border-radius: 22rpx;
+  box-shadow: 0 16rpx 34rpx rgba(37, 99, 235, 0.08);
+}
+
+.download-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.download-title {
+  color: #0f172a;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.download-value {
+  color: #2563eb;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.download-track {
+  margin-top: 14rpx;
+}
+
+.download-desc {
+  display: block;
+  margin-top: 10rpx;
+  color: #64748b;
+  font-size: 22rpx;
+  line-height: 1.6;
+}
+
 .book-label {
   display: block;
   color: #64748b;
@@ -214,71 +253,103 @@
   line-height: 1;
 }
 
-.session-strip {
-  justify-content: space-between;
-  gap: 14rpx;
-  margin-top: 22rpx;
-  padding: 16rpx;
-  background: rgba(255, 255, 255, 0.68);
-  border: 1rpx solid rgba(148, 163, 184, 0.18);
-  border-radius: 24rpx;
-}
-
-.strip-item {
-  flex: 1;
-  text-align: center;
-}
-
-.strip-number {
-  display: block;
-  color: #0f172a;
-  font-size: 32rpx;
-  font-weight: 700;
-}
-
-.strip-label {
-  display: block;
-  margin-top: 4rpx;
-  color: #64748b;
-  font-size: 22rpx;
-}
-
-.book-progress-card {
+.daily-overview-card {
   margin-top: 16rpx;
-  padding: 18rpx 20rpx;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1rpx solid rgba(148, 163, 184, 0.16);
-  border-radius: 22rpx;
+  padding: 22rpx;
+  border-radius: 24rpx;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1rpx solid rgba(37, 99, 235, 0.12);
+  box-shadow: 0 16rpx 34rpx rgba(37, 99, 235, 0.08);
 }
 
-.book-progress-head {
+.daily-goal-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16rpx;
 }
 
-.book-progress-title {
-  color: #475569;
-  font-size: 22rpx;
+.daily-kicker,
+.daily-title,
+.daily-badge,
+.daily-goal-value,
+.daily-goal-label,
+.daily-reward {
+  display: block;
 }
 
-.book-progress-value {
-  color: #0f172a;
+.daily-kicker {
+  color: #64748b;
   font-size: 22rpx;
   font-weight: 600;
 }
 
-.book-progress-track {
-  margin-top: 12rpx;
-  margin-bottom: 0;
+.daily-title {
+  margin-top: 8rpx;
+  color: #0f172a;
+  font-size: 34rpx;
+  font-weight: 800;
 }
 
-.book-progress-eta {
+.daily-badge {
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.daily-goal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.compact-grid {
+  gap: 10rpx;
+}
+
+.daily-goal-item {
+  padding: 14rpx 10rpx;
+  border-radius: 16rpx;
+  background: rgba(248, 250, 252, 0.92);
+  text-align: center;
+}
+
+.daily-goal-value {
+  color: #0f172a;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.daily-goal-label {
+  margin-top: 6rpx;
+  color: #64748b;
+  font-size: 20rpx;
+}
+
+.daily-reward {
+  margin-top: 14rpx;
+  color: #475569;
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
+.overview-progress {
+  margin-top: 16rpx;
+}
+
+.overview-progress .compact {
+  margin: 0;
+}
+
+.overview-progress-text {
   display: block;
   margin-top: 10rpx;
   color: #64748b;
-  font-size: 20rpx;
+  font-size: 22rpx;
   line-height: 1.5;
 }
 

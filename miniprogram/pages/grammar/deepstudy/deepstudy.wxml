@@ -5,8 +5,9 @@
   </view>
 
   <view class="hero-card">
-    <view class="hero-badge">深度学习</view>
-    <view class="hero-title">{{currentCollectionLabel}} 语法会话</view>
+    <view class="hero-badge">今日目标</view>
+    <view class="hero-title">{{currentCollectionLabel}} 语法 {{sessionTarget}} 条小练习</view>
+    <text class="hero-subtitle">完成后可回学习台、再来一轮，或复习低熟练语法。</text>
     <scroll-view class="collection-strip" scroll-x enhanced show-scrollbar="false">
       <view class="collection-row">
         <view
@@ -22,12 +23,16 @@
     </scroll-view>
     <view class="session-grid">
       <view class="session-card">
+        <text class="session-value">{{completedCount}}/{{sessionTotal}}</text>
+        <text class="session-label">本轮进度</text>
+      </view>
+      <view class="session-card">
         <text class="session-value">{{reviewRemaining}}</text>
-        <text class="session-label">待复习</text>
+        <text class="session-label">本轮复习</text>
       </view>
       <view class="session-card">
         <text class="session-value">{{newRemaining}}</text>
-        <text class="session-label">待新学</text>
+        <text class="session-label">本轮新学</text>
       </view>
     </view>
   </view>
@@ -100,8 +105,9 @@
   </view>
 
   <view wx:elif="{{allCompleted}}" class="complete-card">
-    <text class="complete-title">当前词书语法今天已经刷完了</text>
-    <text class="complete-desc">你可以切换词书继续学习，或者重置本词书进度重新开始。</text>
+    <text class="complete-title">本轮语法目标完成</text>
+    <text class="complete-desc">今天先完成一个 {{sessionTarget}} 条小目标就够清楚了。如果状态还不错，可以再来一轮；如果已经没有待学内容，就切换等级或回到今日学习台。</text>
+    <button class="next-btn" bindtap="loadGrammar">再来一轮</button>
     <button class="reset-btn" bindtap="resetStudy">重置本词书记录</button>
   </view>
 

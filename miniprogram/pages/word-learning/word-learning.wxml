@@ -6,8 +6,8 @@
           <view class="brand-dot"></view>
         </view>
         <view class="progress-copy topbar-copy">
-          <text class="progress-main">背词</text>
-          <text class="progress-sub">今天 {{sessionStats.completed}} / {{dashboard.sessionSize}}</text>
+          <text class="progress-main">单词学习</text>
+          <text class="progress-sub">{{levels[levelIndex]}} · 今日 {{sessionStats.completed}} / {{dashboard.sessionSize}}</text>
         </view>
       </view>
       <view class="topbar-right">
@@ -35,38 +35,48 @@
       </view>
     </picker>
 
-    <view class="book-progress-card">
-      <view class="book-progress-head">
-        <text class="book-progress-title">词书进度</text>
-        <text class="book-progress-value">{{dashboard.learnedWords}} / {{dashboard.totalWords}} · {{dashboard.learnedPercent}}%</text>
+    <view class="daily-overview-card">
+      <view class="daily-goal-head">
+        <view>
+          <text class="daily-kicker">今日目标</text>
+          <text class="daily-title">单词 {{sessionStats.completed}} / {{dashboard.sessionSize}}</text>
+        </view>
+        <text class="daily-badge">新 {{dashboard.newPlanned}} · 复 {{dashboard.reviewPlanned}}</text>
       </view>
-      <view class="progress-track book-progress-track">
-        <view class="progress-fill" style="width: {{dashboard.learnedPercentWidth}};"></view>
+
+      <view class="overview-progress">
+        <view class="progress-track compact">
+          <view class="progress-fill" style="width: {{sessionProgressWidth}};"></view>
+        </view>
+        <text class="overview-progress-text">词书 {{dashboard.learnedWords}} / {{dashboard.totalWords}} · {{dashboard.learnedPercent}}% · {{dashboard.finishEtaText}}</text>
       </view>
-      <text class="book-progress-eta">{{dashboard.finishEtaText}}</text>
+
+      <view class="daily-goal-grid compact-grid">
+        <view class="daily-goal-item">
+          <text class="daily-goal-value">{{queueStats.reviewRemaining}}</text>
+          <text class="daily-goal-label">待复习</text>
+        </view>
+        <view class="daily-goal-item">
+          <text class="daily-goal-value">{{queueStats.newRemaining}}</text>
+          <text class="daily-goal-label">新词</text>
+        </view>
+        <view class="daily-goal-item">
+          <text class="daily-goal-value">{{sessionStats.again}}/{{sessionStats.hard}}</text>
+          <text class="daily-goal-label">薄弱</text>
+        </view>
+      </view>
+      <text class="daily-reward">上限：新词 {{settings.newLimit}} · 复习 {{settings.reviewLimit}}；完成后可回学习台、再来一轮或复习薄弱词。</text>
     </view>
 
-    <view class="session-strip">
-      <view class="strip-item">
-        <text class="strip-number">{{queueStats.reviewRemaining}}</text>
-        <text class="strip-label">复习</text>
+    <view wx:if="{{downloadingBook}}" class="download-card">
+      <view class="download-head">
+        <text class="download-title">词书资源准备中</text>
+        <text class="download-value">{{downloadProgress}}%</text>
       </view>
-      <view class="strip-item">
-        <text class="strip-number">{{queueStats.newRemaining}}</text>
-        <text class="strip-label">新词</text>
+      <view class="progress-track download-track">
+        <view class="progress-fill" style="width: {{downloadProgressWidth}};"></view>
       </view>
-      <view class="strip-item">
-        <text class="strip-number">{{queueStats.dueRemaining}}</text>
-        <text class="strip-label">到期</text>
-      </view>
-      <view class="strip-item">
-        <text class="strip-number">{{sessionStats.again}}</text>
-        <text class="strip-label">回炉</text>
-      </view>
-    </view>
-
-    <view class="progress-track compact">
-      <view class="progress-fill" style="width: {{sessionProgressWidth}};"></view>
+      <text class="download-desc">{{downloadText}}</text>
     </view>
 
     <view wx:if="{{false}}" class="empty-panel">

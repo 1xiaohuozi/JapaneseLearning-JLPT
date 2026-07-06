@@ -223,9 +223,8 @@ async function readProgress(userId, collection) {
   }
 }
 
-async function buildSession({ userId, collection, newLimit = 20, reviewLimit = 40, dateKey }) {
-  const totalRes = await db.collection(collection).count()
-  const totalWords = totalRes.total || 0
+async function buildSession({ userId, collection, newLimit = 20, reviewLimit = 40, dateKey, contentMode = 'cloud', totalWordsHint = 0 }) {
+  const totalWords = Number(totalWordsHint) || (await db.collection(collection).count()).total || 0
   const todayKey = resolveDateKey(dateKey)
   const nowDate = new Date()
 
@@ -340,6 +339,16 @@ async function buildSession({ userId, collection, newLimit = 20, reviewLimit = 4
     .filter(Boolean)
     .map(word => normalizeWord(word, recordMap, favoriteSet, 'new'))
 
+  const toSessionEntry = word => ({
+    word_id: word._id,
+    proficiency: word.proficiency || 0,
+    stability: word.stability || 0,
+    nextReview: word.nextReview || null,
+    hasRecord: !!word.hasRecord,
+    isFavorited: !!word.isFavorited,
+    sessionType: word.sessionType || 'new'
+  })
+
   const freshStats = {
     totalWords,
     learnedWords,
@@ -358,6 +367,9 @@ async function buildSession({ userId, collection, newLimit = 20, reviewLimit = 4
       savedProgress.dateKey === todayKey &&
       Array.isArray(savedProgress.queueIds)
     ) {
+      if (!savedProgress.queueIds.length && freshStats.sessionSize > 0) {
+        // Ignore stale empty progress snapshots when a fresh session can be built.
+      } else {
       const savedWordsRaw = await getWordsByIds(collection, savedProgress.queueIds)
       const savedWordMap = new Map(savedWordsRaw.map(word => [word._id, word]))
       const savedFavoriteSet = await getFavoriteSetByWordIds(userId, collection, savedProgress.queueIds)
@@ -372,12 +384,14 @@ async function buildSession({ userId, collection, newLimit = 20, reviewLimit = 4
         ))
 
       return {
-        sessionWords: savedWords,
+        sessionWords: contentMode === 'local' ? [] : savedWords,
+        sessionEntries: contentMode === 'local' ? savedWords.map(toSessionEntry) : [],
         stats: {
           ...freshStats,
           ...(savedProgress.planStats || {})
         },
         progress: savedProgress
+      }
       }
     }
   }
@@ -397,7 +411,8 @@ async function buildSession({ userId, collection, newLimit = 20, reviewLimit = 4
   }
 
   return {
-    sessionWords: buildSessionQueue(dueWords, newWords),
+    sessionWords: contentMode === 'local' ? [] : buildSessionQueue(dueWords, newWords),
+    sessionEntries: contentMode === 'local' ? buildSessionQueue(dueWords, newWords).map(toSessionEntry) : [],
     stats: freshStats
   }
 }
@@ -546,7 +561,7 @@ async function toggleFavorite({ userId, word_id, collection }) {
   return { ok: true, status: true }
 }
 
-async function getFavorites({ userId, collection, skip = 0, limit = 20 }) {
+async function getFavorites({ userId, collection, skip = 0, limit = 20, contentMode = 'cloud' }) {
   if (!userId) return { words: [], hasMore: false }
 
   const favDocs = await db.collection('user_word_favorites')
@@ -558,6 +573,13 @@ async function getFavorites({ userId, collection, skip = 0, limit = 20 }) {
 
   const ids = favDocs.data.map(item => item.word_id)
   if (!ids.length) return { words: [], hasMore: false }
+
+  if (contentMode === 'local') {
+    return {
+      wordIds: ids,
+      hasMore: favDocs.data.length >= limit
+    }
+  }
 
   const words = await getWordsByIds(collection, ids)
   const wordMap = new Map(words.map(word => [word._id, word]))

@@ -1,5 +1,8 @@
 const db = wx.cloud.database()
 const _ = db.command
+const { getWordBook, hasLocalWordBook } = require('../../utils/wordBookCache')
+const { markTaskCompleted, getNextTaskSuggestion } = require('../../utils/retention')
+const { getStudyPlan } = require('../../utils/studyPlan')
 
 const PAGE_SIZE = 20
 const QUERY_BATCH_SIZE = 20
@@ -88,27 +91,57 @@ Page({
     profMap: {},
     learnedMap: {},
 
+    downloadingBook: false,
+    downloadProgress: 0,
+    downloadProgressWidth: '0%',
+    downloadText: '',
+
     showDetail: false,
     detailWord: null
   },
 
   async onLoad() {
-    if (!this.ensureLoggedIn()) return
+    if (this.redirectToPlanSetupIfNeeded()) return
+    this.syncLoginState()
     await this.loadSettings()
+    this._localSettingsSyncKey = this.getStoredSettingsSyncKey()
     await this.bootstrap()
   },
 
   async onShow() {
-    if (!this.ensureLoggedIn()) return
+    if (this.redirectToPlanSetupIfNeeded()) return
+    this.syncLoginState()
     const userId = this.getUserId()
     if (userId !== this._lastUserId) {
       await this.loadSettings()
+      this._localSettingsSyncKey = this.getStoredSettingsSyncKey()
       this._lastUserId = userId
       await this.bootstrap()
+      return
     }
+
+    const nextSettingsKey = this.getStoredSettingsSyncKey()
+    if (this._localSettingsSyncKey && nextSettingsKey !== this._localSettingsSyncKey) {
+      await this.applyExternalSettingsChange(nextSettingsKey)
+      this.handleEntryAction()
+      return
+    }
+    this.handleEntryAction()
+  },
+
+  redirectToPlanSetupIfNeeded() {
+    if (getStudyPlan().setupDone) return false
+    if (this._redirectingToPlanSetup) return true
+
+    this._redirectingToPlanSetup = true
+    wx.nextTick(() => {
+      wx.switchTab({ url: '/pages/profile/profile' })
+    })
+    return true
   },
 
   onHide() {
+    this._redirectingToPlanSetup = false
     this.persistSessionSnapshot({ immediateCloud: true })
     this.flushPendingWordRecords()
   },
@@ -121,6 +154,14 @@ Page({
 
   getUserId() {
     return wx.getStorageSync('userId') || ''
+  },
+
+  syncLoginState() {
+    const isLoggedIn = !!this.getUserId()
+    if (this.data.isLoggedIn !== isLoggedIn) {
+      this.setData({ isLoggedIn })
+    }
+    return isLoggedIn
   },
 
   ensureLoggedIn() {
@@ -158,6 +199,57 @@ Page({
     return `word_pending_records_${userKey}_${this.getCurrentCollection()}`
   },
 
+  async ensureActiveWordBook() {
+    const collection = this.getCurrentCollection()
+    if (this._activeWordBook && this._activeWordBookCollection === collection) {
+      return this._activeWordBook
+    }
+
+    const label = this.data.levels[this.data.levelIndex] || collection
+    const book = await getWordBook(collection, {
+      onProgress: payload => this.handleBookDownloadProgress(label, payload)
+    })
+    this._activeWordBook = book
+    this._activeWordBookCollection = collection
+    this.setData({
+      downloadingBook: false,
+      downloadProgress: 0,
+      downloadProgressWidth: '0%',
+      downloadText: ''
+    })
+    return book
+  },
+
+  hasLocalWordBook() {
+    return hasLocalWordBook(this.getCurrentCollection())
+  },
+
+  getActiveWordList() {
+    return this._activeWordBook?.list || []
+  },
+
+  getActiveWordById(wordId) {
+    return this._activeWordBook?.byId?.[wordId] || null
+  },
+
+  handleBookDownloadProgress(label, payload = {}) {
+    const phaseMap = {
+      preparing: '准备下载',
+      downloading: '正在下载',
+      saving: '正在保存',
+      parsing: '正在解析',
+      'reading-cache': '正在读取本地缓存'
+    }
+    const progress = Math.max(0, Math.min(100, Number(payload.progress || 0)))
+    const phaseText = phaseMap[payload.phase] || '正在加载'
+    this.setData({
+      downloadingBook: true,
+      downloadProgress: progress,
+      downloadProgressWidth: `${progress}%`,
+      downloadText: `${label} 词书${phaseText} ${progress}%`
+    })
+  },
+
   getTodayKey() {
     const date = new Date()
     const y = date.getFullYear()
@@ -189,6 +281,7 @@ Page({
   async loadSettings() {
     const cached = wx.getStorageSync('word_learning_settings')
     const nextLevelIndex = Number.isInteger(cached?.levelIndex) ? cached.levelIndex : this.data.levelIndex
+    const preferLocalPlan = cached?.planSource === 'study_plan'
     const localSettings = {
       ...DEFAULT_SETTINGS,
       ...(cached || {})
@@ -215,23 +308,64 @@ Page({
       const mergedSettings = {
         ...DEFAULT_SETTINGS,
         ...localSettings,
-        newLimit: Number(profile.newLimit) || localSettings.newLimit,
-        reviewLimit: Number(profile.reviewLimit) || localSettings.reviewLimit
+        newLimit: preferLocalPlan ? localSettings.newLimit : (Number(profile.newLimit) || localSettings.newLimit),
+        reviewLimit: preferLocalPlan ? localSettings.reviewLimit : (Number(profile.reviewLimit) || localSettings.reviewLimit)
       }
 
       this.setData({
-        levelIndex: mergedLevelIndex,
+        levelIndex: preferLocalPlan ? this.data.levelIndex : mergedLevelIndex,
         settings: mergedSettings
       })
       this.markProfileSynced({
-        collection: this.data.collectionMap[this.data.levels[mergedLevelIndex]],
+        collection: this.getCurrentCollection(),
         newLimit: mergedSettings.newLimit,
         reviewLimit: mergedSettings.reviewLimit
       })
       this.persistLocalSettings()
+      if (preferLocalPlan) {
+        await this.saveSettings({ force: true })
+      }
     } catch (error) {
       console.error('loadSettings failed', error)
     }
+  },
+
+  getStoredSettingsSyncKey() {
+    const cached = wx.getStorageSync('word_learning_settings') || {}
+    const levelIndex = Number.isInteger(cached.levelIndex) ? cached.levelIndex : this.data.levelIndex
+    return JSON.stringify({
+      levelIndex,
+      newLimit: Number(cached.newLimit) || DEFAULT_SETTINGS.newLimit,
+      reviewLimit: Number(cached.reviewLimit) || DEFAULT_SETTINGS.reviewLimit,
+      planUpdatedAt: Number(cached.planUpdatedAt) || 0
+    })
+  },
+
+  async applyExternalSettingsChange(nextSettingsKey) {
+    await this.flushPendingWordRecords()
+    await this.loadSettings()
+    this._localSettingsSyncKey = nextSettingsKey || this.getStoredSettingsSyncKey()
+    await this.clearPersistedSessionSnapshot()
+    this.setData({
+      sessionCompleted: false,
+      sessionWords: [],
+      currentWord: null,
+      sessionIndex: 0,
+      sessionStats: { ...DEFAULT_SESSION_STATS },
+      queueStats: {
+        reviewRemaining: 0,
+        newRemaining: 0,
+        dueRemaining: 0
+      },
+      libraryWords: [],
+      filteredLibraryWords: [],
+      libraryPage: 0,
+      hasMoreLibrary: true,
+      favoriteWords: [],
+      favoritePage: 0,
+      hasMoreFavorites: true
+    })
+    await this.bootstrap()
   },
 
   persistLocalSettings() {
@@ -286,6 +420,8 @@ Page({
       detailWord: null
     })
 
+    await this.ensureActiveWordBook()
+
     if (this._lastUserId) {
       await this.saveSettings()
     }
@@ -327,9 +463,13 @@ Page({
   async buildSession() {
     if (this.data.sessionLoading) return
 
+    this._wordSessionRecapShown = false
+    this._weakWordMap = {}
     this.setData({ sessionLoading: true })
     const collection = this.getCurrentCollection()
     const userId = this.getUserId()
+    const activeBook = await this.ensureActiveWordBook()
+    const useLocalContent = activeBook.mode === 'local'
 
     try {
       await this.flushPendingWordRecords()
@@ -338,10 +478,15 @@ Page({
         collection,
         newLimit: this.data.settings.newLimit,
         reviewLimit: this.data.settings.reviewLimit,
-        dateKey: this.getTodayKey()
+        dateKey: this.getTodayKey(),
+        contentMode: useLocalContent ? 'local' : 'cloud',
+        totalWordsHint: useLocalContent ? activeBook.list.length : 0
       })
 
-      const sessionWords = (result.sessionWords || []).map(word => {
+      const sourceWords = useLocalContent
+        ? this.hydrateLocalSessionWords(result.sessionEntries || [])
+        : (result.sessionWords || [])
+      const sessionWords = sourceWords.map(word => {
         const stage = this.getWordStage(word)
         return {
           ...word,
@@ -421,11 +566,12 @@ Page({
       }
     }
 
-    const candidates = [local, cloudSnapshot].filter(item =>
-      item &&
-      item.dateKey === todayKey &&
-      Array.isArray(item.queueIds)
-    )
+    const candidates = [local, cloudSnapshot].filter(item => {
+      if (!item || item.dateKey !== todayKey || !Array.isArray(item.queueIds)) {
+        return false
+      }
+      return item.queueIds.length > 0 || words.length === 0
+    })
 
     if (!candidates.length) return fallback
     return candidates.sort((a, b) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0))[0]
@@ -456,6 +602,24 @@ Page({
         ...(snapshot.sessionStats || {})
       }
     }
+  },
+
+  hydrateLocalSessionWords(entries = []) {
+    return entries
+      .map(entry => {
+        const baseWord = this.getActiveWordById(entry.word_id || entry._id)
+        if (!baseWord) return null
+        return {
+          ...baseWord,
+          proficiency: entry.proficiency || 0,
+          stability: entry.stability || 0,
+          nextReview: entry.nextReview || null,
+          hasRecord: !!entry.hasRecord,
+          isFavorited: !!entry.isFavorited,
+          sessionType: entry.sessionType || 'new'
+        }
+      })
+      .filter(Boolean)
   },
 
   persistSessionSnapshot(overrides = {}) {
@@ -654,22 +818,29 @@ Page({
     if (this.data.loadingLibrary || !this.data.hasMoreLibrary) return
 
     this.setData({ loadingLibrary: true })
-    const collection = this.getCurrentCollection()
 
     try {
-      const res = await db.collection(collection)
-        .orderBy('order', 'asc')
-        .skip(this.data.libraryPage * PAGE_SIZE)
-        .limit(PAGE_SIZE)
-        .get()
+      let sourceWords = []
+      if (this.hasLocalWordBook()) {
+        await this.ensureActiveWordBook()
+        const start = this.data.libraryPage * PAGE_SIZE
+        sourceWords = this.getActiveWordList().slice(start, start + PAGE_SIZE)
+      } else {
+        const res = await db.collection(this.getCurrentCollection())
+          .orderBy('order', 'asc')
+          .skip(this.data.libraryPage * PAGE_SIZE)
+          .limit(PAGE_SIZE)
+          .get()
+        sourceWords = res.data || []
+      }
 
-      const enriched = await this.attachWordMeta(res.data || [])
+      const enriched = await this.attachWordMeta(sourceWords)
       const libraryWords = this.data.libraryWords.concat(enriched)
 
       this.setData({
         libraryWords,
         libraryPage: this.data.libraryPage + 1,
-        hasMoreLibrary: (res.data || []).length >= PAGE_SIZE,
+        hasMoreLibrary: sourceWords.length >= PAGE_SIZE,
         loadingLibrary: false
       })
 
@@ -847,10 +1018,14 @@ Page({
         userId,
         collection: this.getCurrentCollection(),
         skip: this.data.favoritePage * PAGE_SIZE,
-        limit: PAGE_SIZE
+        limit: PAGE_SIZE,
+        contentMode: this.hasLocalWordBook() ? 'local' : 'cloud'
       })
 
-      const words = await this.attachWordMeta(result.words || [], { forceFavorited: true })
+      const sourceWords = this.hasLocalWordBook()
+        ? (result.wordIds || []).map(id => this.getActiveWordById(id)).filter(Boolean)
+        : (result.words || [])
+      const words = await this.attachWordMeta(sourceWords, { forceFavorited: true })
       this.setData({
         favoriteWords: this.data.favoriteWords.concat(words),
         favoritePage: this.data.favoritePage + 1,
@@ -908,7 +1083,28 @@ Page({
     })
 
     await this.saveSettings()
+    await this.clearPersistedSessionSnapshot()
+    this.setData({
+      sessionCompleted: false,
+      sessionWords: [],
+      currentWord: null,
+      sessionIndex: 0,
+      sessionStats: { ...DEFAULT_SESSION_STATS },
+      queueStats: {
+        reviewRemaining: 0,
+        newRemaining: 0,
+        dueRemaining: 0
+      }
+    })
     await this.bootstrap()
+  },
+
+  openSettingsPanel() {
+    this.setData({
+      drawerOpen: true,
+      drawerSection: 'settings',
+      showSettings: true
+    })
   },
 
   async switchTab(e) {
@@ -922,6 +1118,26 @@ Page({
 
   openDrawer() {
     this.setData({ drawerOpen: true })
+  },
+
+  handleEntryAction() {
+    const action = wx.getStorageSync('word_learning_entry_action')
+    if (!action || action.type !== 'weak') return
+    wx.removeStorageSync('word_learning_entry_action')
+    this.openWeakWordDrawer()
+  },
+
+  async openWeakWordDrawer() {
+    this.setData({
+      drawerOpen: true,
+      drawerSection: 'library',
+      libraryFilter: 'learning'
+    })
+    if (!this.data.libraryWords.length) {
+      await this.loadMoreLibrary()
+    } else {
+      this.applyLibraryFilterAndSearch()
+    }
   },
 
   closeDrawer() {
@@ -1048,6 +1264,16 @@ Page({
       }))
     }
 
+    if (rating === 'again' || rating === 'hard') {
+      this._weakWordMap = {
+        ...(this._weakWordMap || {}),
+        [updatedWord._id]: {
+          ...updatedWord,
+          sessionType: 'review'
+        }
+      }
+    }
+
     sessionWords.splice(currentIndex, 1)
 
     if (rating === 'again') {
@@ -1144,19 +1370,112 @@ Page({
 
   nextCard() {
     const nextWord = this.data.sessionWords[this.data.sessionIndex] || null
+    const completedNow = !nextWord
     this.setData({
       currentWord: nextWord,
       answered: false,
       lastRating: '',
       cardFlipped: false,
       cardFlashClass: '',
-      sessionCompleted: !nextWord,
+      sessionCompleted: completedNow,
       queueStats: this.computeQueueStats(this.data.sessionWords),
       sessionProgressWidth: this.toPercentWidth(this.data.sessionProgressPercent)
     })
     this.persistSessionSnapshot({
       currentWordId: nextWord ? nextWord._id : '',
       currentIndex: this.data.sessionIndex
+    })
+    if (completedNow) {
+      this.showSessionRecap()
+    }
+  },
+
+  showSessionRecap() {
+    if (this._wordSessionRecapShown || !this.data.sessionStats.completed) return
+    this._wordSessionRecapShown = true
+
+    const stats = this.data.sessionStats
+    markTaskCompleted('word', {
+      text: `完成 ${stats.completed} 张卡片`,
+      completed: stats.completed,
+      again: stats.again,
+      hard: stats.hard,
+      good: stats.good
+    })
+
+    wx.showModal({
+      title: '今日单词已完成',
+      content: `本轮完成 ${stats.completed} 个，认识 ${stats.good} 个，模糊 ${stats.hard} 个，回炉 ${stats.again} 个。接下来可以回到今日学习台，也可以继续加练。`,
+      confirmText: '选择下一步',
+      showCancel: false,
+      success: () => this.showWordNextActions()
+    })
+  },
+
+  showWordNextActions() {
+    const weakCount = Object.keys(this._weakWordMap || {}).length
+    const nextTask = getNextTaskSuggestion('word')
+    wx.showActionSheet({
+      itemList: [
+        nextTask.label,
+        '状态不错，再来一轮',
+        weakCount ? `复习薄弱词 ${weakCount} 个` : '查看词库'
+      ],
+      success: res => {
+        if (res.tapIndex === 0) {
+          this.goToSuggestedTask(nextTask)
+          return
+        }
+        if (res.tapIndex === 1) {
+          this.refreshSession()
+          return
+        }
+        if (weakCount) {
+          this.startWeakWordReview()
+        } else {
+          this.setData({ drawerOpen: true, drawerSection: 'library' })
+          if (!this.data.libraryWords.length) this.loadMoreLibrary()
+        }
+      }
+    })
+  },
+
+  goToSuggestedTask(nextTask) {
+    if (!nextTask || !nextTask.hasNext || !nextTask.task) {
+      wx.switchTab({ url: '/pages/profile/profile' })
+      return
+    }
+    if (nextTask.task.key === 'word') {
+      this.refreshSession()
+      return
+    }
+    wx.switchTab({ url: nextTask.task.route })
+  },
+
+  startWeakWordReview() {
+    const weakWords = Object.values(this._weakWordMap || {})
+    if (!weakWords.length) return
+
+    this.setData({
+      sessionWords: weakWords,
+      sessionIndex: 0,
+      currentWord: weakWords[0],
+      answered: false,
+      lastRating: '',
+      cardFlipped: false,
+      cardFlashClass: '',
+      sessionCompleted: false,
+      sessionStats: { ...DEFAULT_SESSION_STATS },
+      queueStats: this.computeQueueStats(weakWords),
+      sessionProgressPercent: 0,
+      sessionProgressWidth: '0%'
+    })
+    this._weakWordMap = {}
+    this.persistSessionSnapshot({
+      queueIds: weakWords.map(word => word._id),
+      currentWordId: weakWords[0]._id,
+      currentIndex: 0,
+      sessionStats: { ...DEFAULT_SESSION_STATS }
     })
   },
 
@@ -1303,7 +1622,8 @@ Page({
   findWordById(wordId) {
     return this.data.sessionWords.find(word => word._id === wordId) ||
       this.data.libraryWords.find(word => word._id === wordId) ||
-      this.data.favoriteWords.find(word => word._id === wordId)
+      this.data.favoriteWords.find(word => word._id === wordId) ||
+      this.getActiveWordById(wordId)
   },
 
   startLearningThisWord() {
